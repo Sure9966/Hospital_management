@@ -1,0 +1,185 @@
+'use client';
+import { useState, useEffect } from 'react';
+import DashboardLayout from '@/components/DashboardLayout';
+import api from '@/lib/api';
+import toast from 'react-hot-toast';
+
+export default function ManagementDashboard() {
+  const [stats, setStats] = useState<any>({});
+  const [staff, setStaff] = useState<any[]>([]);
+  const [patients, setPatients] = useState<any[]>([]);
+  const [broadcastForm, setBroadcastForm] = useState({ title: '', message: '', targetRole: '' });
+  const [loading, setLoading] = useState(false);
+  const [tab, setTab] = useState<'overview'|'staff'|'patients'|'broadcast'>('overview');
+
+  useEffect(() => {
+    api.get('/management/dashboard').then(r => setStats(r.data));
+    api.get('/users').then(r => setStaff(r.data));
+    api.get('/patients').then(r => setPatients(r.data));
+  }, []);
+
+  const handleBroadcast = async (e: React.FormEvent) => {
+    e.preventDefault(); setLoading(true);
+    try {
+      await api.post('/management/broadcast', broadcastForm);
+      toast.success('📢 Broadcast sent to all staff!');
+      setBroadcastForm({ title: '', message: '', targetRole: '' });
+    } catch { toast.error('Failed to send'); }
+    finally { setLoading(false); }
+  };
+
+  const roleColors: Record<string, string> = {
+    admin: '#6366f1', receptionist: '#0ea5e9', nurse: '#10b981',
+    pharmacist: '#f59e0b', management: '#ef4444', patient: '#8b5cf6',
+  };
+
+  const statusColors: Record<string, string> = {
+    registered: 'badge-info', admitted: 'badge-success',
+    under_treatment: 'badge-warning', discharged: 'badge-gray',
+  };
+
+  return (
+    <DashboardLayout role="management">
+      <div className="topbar">
+        <div className="topbar-title">Hospital Management</div>
+        <div className="flex gap-2">
+          {(['overview','staff','patients','broadcast'] as const).map(t => (
+            <button key={t} className={`btn btn-sm ${tab === t ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab(t)} style={{ textTransform: 'capitalize' }}>
+              {t === 'overview' ? '📊' : t === 'staff' ? '👥' : t === 'patients' ? '🏥' : '📢'} {t}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="page-content">
+        {tab === 'overview' && (
+          <>
+            <div className="stats-grid">
+              {[
+                { icon: '🏥', label: 'Total Patients', value: stats.totalPatients ?? 0, color: '#6366f1', gradient: 'linear-gradient(135deg,#6366f1,#818cf8)' },
+                { icon: '👥', label: 'Total Staff', value: stats.totalUsers ?? 0, color: '#0ea5e9', gradient: 'linear-gradient(135deg,#0ea5e9,#38bdf8)' },
+                { icon: '📅', label: 'Total Appointments', value: stats.totalAppointments ?? 0, color: '#10b981', gradient: 'linear-gradient(135deg,#10b981,#34d399)' },
+                { icon: '💊', label: 'Pending Rx', value: stats.pendingPrescriptions ?? 0, color: '#f59e0b', gradient: 'linear-gradient(135deg,#f59e0b,#fbbf24)' },
+                { icon: '🛏️', label: 'Admitted', value: stats.admittedPatients ?? 0, color: '#8b5cf6', gradient: 'linear-gradient(135deg,#8b5cf6,#a78bfa)' },
+                { icon: '🚨', label: 'Critical Vitals', value: stats.criticalVitals ?? 0, color: '#ef4444', gradient: 'linear-gradient(135deg,#ef4444,#f87171)' },
+                { icon: '📅', label: "Today's Appointments", value: stats.todayAppointments ?? 0, color: '#06b6d4', gradient: 'linear-gradient(135deg,#06b6d4,#22d3ee)' },
+              ].map(s => (
+                <div key={s.label} className="stat-card" style={{ '--gradient': s.gradient } as any}>
+                  <div className="stat-icon" style={{ background: `${s.color}22`, color: s.color }}>{s.icon}</div>
+                  <div className="stat-value" style={{ color: s.color }}>{s.value}</div>
+                  <div className="stat-label">{s.label}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid-2">
+              <div className="card">
+                <div className="card-header"><span className="card-title">👥 Staff by Role</span></div>
+                <div className="card-body">
+                  {Object.entries(
+                    staff.reduce((acc: any, u: any) => { acc[u.role] = (acc[u.role] || 0) + 1; return acc; }, {})
+                  ).map(([role, count]: any) => (
+                    <div key={role} className="flex items-center gap-3" style={{ padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                      <div style={{ width: 10, height: 10, borderRadius: '50%', background: roleColors[role] || '#666', flexShrink: 0 }} />
+                      <span style={{ flex: 1, textTransform: 'capitalize', fontSize: 14 }}>{role}</span>
+                      <span style={{ fontWeight: 700, color: roleColors[role] || '#666' }}>{count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="card">
+                <div className="card-header"><span className="card-title">🏥 Patient Status</span></div>
+                <div className="card-body">
+                  {['registered','admitted','under_treatment','discharged'].map(status => {
+                    const count = patients.filter(p => p.status === status).length;
+                    return (
+                      <div key={status} className="flex items-center gap-3" style={{ padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                        <span className={`badge ${statusColors[status]}`}>{status.replace('_', ' ')}</span>
+                        <span style={{ fontWeight: 700, marginLeft: 'auto' }}>{count}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {tab === 'staff' && (
+          <div className="card">
+            <div className="card-header"><span className="card-title">👥 All Staff ({staff.length})</span></div>
+            <div className="table-container">
+              <table>
+                <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Department</th><th>Status</th></tr></thead>
+                <tbody>
+                  {staff.map(u => (
+                    <tr key={u.id}>
+                      <td><strong>{u.firstName} {u.lastName}</strong></td>
+                      <td>{u.email}</td>
+                      <td><span className="badge" style={{ background: `${roleColors[u.role]}22`, color: roleColors[u.role], border: `1px solid ${roleColors[u.role]}44` }}>{u.role}</span></td>
+                      <td>{u.department || '—'}</td>
+                      <td><span className={`badge ${u.isActive ? 'badge-success' : 'badge-danger'}`}>{u.isActive ? 'Active' : 'Inactive'}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {tab === 'patients' && (
+          <div className="card">
+            <div className="card-header"><span className="card-title">🏥 All Patients ({patients.length})</span></div>
+            <div className="table-container">
+              <table>
+                <thead><tr><th>Patient ID</th><th>Name</th><th>Gender</th><th>Blood Group</th><th>Ward</th><th>Status</th></tr></thead>
+                <tbody>
+                  {patients.map(p => (
+                    <tr key={p.id}>
+                      <td><code style={{ color: 'var(--primary-light)', fontSize: 12 }}>{p.patientId}</code></td>
+                      <td><strong>{p.firstName} {p.lastName}</strong></td>
+                      <td>{p.gender}</td>
+                      <td>{p.bloodGroup || '—'}</td>
+                      <td>{p.ward || '—'}</td>
+                      <td><span className={`badge ${statusColors[p.status] || 'badge-gray'}`}>{p.status?.replace('_',' ')}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {tab === 'broadcast' && (
+          <div className="card" style={{ maxWidth: 600 }}>
+            <div className="card-header"><span className="card-title">📢 Broadcast Notification</span></div>
+            <form onSubmit={handleBroadcast}>
+              <div className="card-body">
+                <div className="form-group" style={{ marginBottom: 16 }}>
+                  <label className="form-label">Title *</label>
+                  <input className="form-control" placeholder="Important Notice" value={broadcastForm.title} onChange={e => setBroadcastForm(f => ({ ...f, title: e.target.value }))} required />
+                </div>
+                <div className="form-group" style={{ marginBottom: 16 }}>
+                  <label className="form-label">Message *</label>
+                  <textarea className="form-control" rows={4} placeholder="Enter your broadcast message..." value={broadcastForm.message} onChange={e => setBroadcastForm(f => ({ ...f, message: e.target.value }))} required />
+                </div>
+                <div className="form-group" style={{ marginBottom: 20 }}>
+                  <label className="form-label">Target Role (leave blank for all)</label>
+                  <select className="form-control" value={broadcastForm.targetRole} onChange={e => setBroadcastForm(f => ({ ...f, targetRole: e.target.value }))}>
+                    <option value="">All Staff</option>
+                    <option value="receptionist">Receptionist</option>
+                    <option value="nurse">Nurse</option>
+                    <option value="pharmacist">Pharmacist</option>
+                    <option value="management">Management</option>
+                  </select>
+                </div>
+                <button type="submit" className="btn btn-primary w-full" disabled={loading} style={{ height: 44 }}>
+                  {loading ? '⏳ Sending...' : '📢 Send Broadcast'}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+      </div>
+    </DashboardLayout>
+  );
+}
