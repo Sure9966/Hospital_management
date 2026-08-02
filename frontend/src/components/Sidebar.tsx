@@ -17,7 +17,8 @@ const roleMenus: Record<string, { icon: string; label: string; href: string }[]>
     { icon: '🏥', label: 'Register Patient', href: '/dashboard/receptionist/register' },
     { icon: '📅', label: 'Appointments', href: '/dashboard/receptionist/appointments' },
     { icon: '🎟️', label: 'OPD Queue Tokens', href: '/dashboard/receptionist/opd-queue' },
-    { icon: '🛏️', label: 'Bed Management', href: '/dashboard/admin/beds' },
+    { icon: '🛏️', label: 'Bed Management', href: '/dashboard/receptionist/beds' },
+    { icon: '💳', label: 'Billing & Payments', href: '/dashboard/receptionist/beds?tab=billing' },
   ],
   nurse: [
     { icon: '📊', label: 'Dashboard', href: '/dashboard/nurse' },
