@@ -62,6 +62,9 @@ export default function BedManagementPage() {
   const [showAdmissionModal, setShowAdmissionModal] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
 
+  // Discharge confirmation state
+  const [confirmDischargeBedId, setConfirmDischargeBedId] = useState<string | null>(null);
+
   // New Bed Form
   const [bedForm, setBedForm] = useState({
     bedNumber: '',
@@ -122,10 +125,10 @@ export default function BedManagementPage() {
   };
 
   const handleDischarge = async (bedId: string) => {
-    if (!confirm('Are you sure you want to discharge this patient and send the bed to cleaning?')) return;
     try {
       await api.post(`/beds/${bedId}/discharge`, {});
       toast.success('Patient discharged! Bed is now set for cleaning.');
+      setConfirmDischargeBedId(null);
       fetchData();
     } catch {
       toast.error('Failed to discharge patient');
@@ -461,7 +464,7 @@ export default function BedManagementPage() {
                   {/* Actions */}
                   <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
                     {isOccupied && (
-                      <button className="btn btn-danger btn-sm w-full" onClick={() => handleDischarge(bed.id)}>
+                      <button className="btn btn-danger btn-sm w-full" onClick={() => setConfirmDischargeBedId(bed.id)}>
                         🚪 Discharge Patient
                       </button>
                     )}
@@ -539,6 +542,34 @@ export default function BedManagementPage() {
                       ))}
                     </select>
                   </div>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Ready Bed Number (Optional)</label>
+                  <select
+                    className="form-control"
+                    value={targetBedId}
+                    onChange={(e) => {
+                      setTargetBedId(e.target.value);
+                      const selectedBed = beds.find(b => b.id === e.target.value);
+                      if (selectedBed) {
+                        setAdmissionForm(prev => ({
+                          ...prev,
+                          requestedWard: selectedBed.ward?.name || prev.requestedWard,
+                          notes: prev.notes ? `${prev.notes} [Preferred Bed: ${selectedBed.bedNumber}]` : `[Preferred Bed: ${selectedBed.bedNumber}]`
+                        }));
+                      }
+                    }}
+                  >
+                    <option value="">-- Select Ready Bed (Vacant) --</option>
+                    {beds.filter((b) => b.status === BedStatus.VACANT).map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.bedNumber} ({b.ward?.name || 'Ward'} - {b.roomNumber}) — READY
+                      </option>
+                    ))}
+                  </select>
+                  <span style={{ fontSize: 11, color: '#10b981', marginTop: 4, display: 'block' }}>
+                    🟢 Reflecting {beds.filter((b) => b.status === BedStatus.VACANT).length} real-time ready beds available for direct allocation.
+                  </span>
                 </div>
                 <div className="form-group">
                   <label className="form-label">Primary Diagnosis</label>
@@ -718,6 +749,28 @@ export default function BedManagementPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Discharge Confirmation Modal */}
+      {confirmDischargeBedId && (
+        <div className="modal-overlay">
+          <div className="modal" style={{ maxWidth: 420 }}>
+            <div className="modal-header">
+              <h3>🚪 Confirm Patient Discharge</h3>
+              <button className="btn btn-secondary btn-sm btn-icon" onClick={() => setConfirmDischargeBedId(null)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ fontSize: 14, marginBottom: 8 }}>Are you sure you want to discharge this patient?</p>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>The bed will be moved to <strong>Cleaning</strong> status after discharge.</p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setConfirmDischargeBedId(null)}>Cancel</button>
+              <button className="btn btn-danger" onClick={() => handleDischarge(confirmDischargeBedId)} disabled={actionLoading}>
+                {actionLoading ? 'Discharging...' : '✓ Confirm Discharge'}
+              </button>
+            </div>
           </div>
         </div>
       )}
