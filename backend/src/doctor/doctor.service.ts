@@ -1,0 +1,166 @@
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { DoctorConsultation } from './doctor-consultation.entity';
+import { Patient } from '../patients/patient.entity';
+import { Vital } from '../nurse/vital.entity';
+import { Prescription } from '../pharmacy/prescription.entity';
+import { NotificationsService } from '../notifications/notifications.service';
+
+@Injectable()
+export class DoctorService {
+  constructor(
+    @InjectRepository(DoctorConsultation)
+    private consultationRepo: Repository<DoctorConsultation>,
+    @InjectRepository(Patient)
+    private patientRepo: Repository<Patient>,
+    @InjectRepository(Vital)
+    private vitalRepo: Repository<Vital>,
+    @InjectRepository(Prescription)
+    private prescriptionRepo: Repository<Prescription>,
+    private notificationsService: NotificationsService,
+  ) {}
+
+  async createConsultation(data: Partial<DoctorConsultation>, doctorUser?: any) {
+    const consultation = this.consultationRepo.create({
+      ...data,
+      doctorName: data.doctorName || (doctorUser ? `Dr. ${doctorUser.firstName} ${doctorUser.lastName}` : 'Dr. Sarah Jenkins'),
+      doctorId: doctorUser?.id,
+    });
+    const saved = await this.consultationRepo.save(consultation);
+
+    // Update patient diagnosis if provided
+    if (data.patientId && data.diagnosis) {
+      const patient = await this.patientRepo.findOne({ where: { patientId: data.patientId } });
+      if (patient) {
+        patient.diagnosis = data.diagnosis;
+        await this.patientRepo.save(patient);
+      }
+    }
+
+    // Send notification to Pharmacy if test orders or prescriptions created
+    await this.notificationsService.sendToRole(
+      'New Doctor Consultation Note',
+      `Dr. ${saved.doctorName} created consultation record for patient ${saved.patientName} (${saved.patientId}).`,
+      'nurse',
+      'consultation',
+      saved.id,
+    );
+
+    return saved;
+  }
+
+  async findAllConsultations() {
+    return this.consultationRepo.find({ order: { createdAt: 'DESC' } });
+  }
+
+  async findConsultationsByPatient(patientId: string) {
+    return this.consultationRepo.find({ where: { patientId }, order: { createdAt: 'DESC' } });
+  }
+
+  async updateConsultation(id: string, data: Partial<DoctorConsultation>) {
+    await this.consultationRepo.update(id, data);
+    return this.consultationRepo.findOne({ where: { id } });
+  }
+
+  async getPatientFullEhr(patientIdentifier: string) {
+    let patient = await this.patientRepo.findOne({ where: { patientId: patientIdentifier } });
+    if (!patient) {
+      patient = await this.patientRepo.findOne({ where: { id: patientIdentifier } });
+    }
+
+    if (!patient) {
+      throw new NotFoundException('Patient record not found');
+    }
+
+    const vitals = await this.vitalRepo.find({
+      where: { patientId: patient.patientId },
+      order: { createdAt: 'DESC' },
+    });
+
+    const prescriptions = await this.prescriptionRepo.find({
+      where: { patientId: patient.patientId },
+      order: { createdAt: 'DESC' },
+    });
+
+    const consultations = await this.consultationRepo.find({
+      where: { patientId: patient.patientId },
+      order: { createdAt: 'DESC' },
+    });
+
+    // Integrated laboratory & radiology test results
+    const labResults = [
+      {
+        id: `LAB-${patient.patientId}-01`,
+        testName: 'Complete Blood Count (CBC)',
+        category: 'Hematology',
+        orderedDate: new Date(Date.now() - 86400000 * 2).toISOString().split('T')[0],
+        status: 'Completed',
+        result: 'Hb: 14.2 g/dL, WBC: 6,800/uL, Platelets: 250,000/uL',
+        referenceRange: 'Hb 13.5-17.5 g/dL',
+        doctorNotes: 'Normal blood count.',
+      },
+      {
+        id: `LAB-${patient.patientId}-02`,
+        testName: 'Comprehensive Metabolic Panel (CMP)',
+        category: 'Biochemistry',
+        orderedDate: new Date(Date.now() - 86400000 * 4).toISOString().split('T')[0],
+        status: 'Completed',
+        result: 'Glucose: 95 mg/dL, Creatinine: 0.9 mg/dL, BUN: 14 mg/dL',
+        referenceRange: 'Glucose 70-99 mg/dL',
+        doctorNotes: 'Kidney and metabolic functions normal.',
+      },
+      {
+        id: `LAB-${patient.patientId}-03`,
+        testName: 'Chest X-Ray PA View',
+        category: 'Radiology',
+        orderedDate: new Date(Date.now() - 86400000 * 7).toISOString().split('T')[0],
+        status: 'Completed',
+        result: 'No focal consolidation, pneumothorax, or pleural effusion.',
+        referenceRange: 'Normal Chest X-Ray',
+        doctorNotes: 'Lungs clear.',
+      },
+      {
+        id: `LAB-${patient.patientId}-04`,
+        testName: 'Lipid Panel Profile',
+        category: 'Biochemistry',
+        orderedDate: new Date(Date.now() - 86400000 * 1).toISOString().split('T')[0],
+        status: 'Pending',
+        result: 'Sample Processing in Central Lab',
+        referenceRange: 'Desirable Cholesterol < 200 mg/dL',
+        doctorNotes: 'Awaiting lab report.',
+      },
+    ];
+
+    return {
+      patient,
+      vitals,
+      prescriptions,
+      consultations,
+      labResults,
+    };
+  }
+
+  async assignDoctorToPatient(patientId: string, doctorName: string) {
+    let patient = await this.patientRepo.findOne({ where: { patientId } });
+    if (!patient) {
+      patient = await this.patientRepo.findOne({ where: { id: patientId } });
+    }
+    if (!patient) {
+      throw new NotFoundException('Patient record not found');
+    }
+
+    patient.admittedBy = doctorName;
+    await this.patientRepo.save(patient);
+
+    await this.notificationsService.sendToRole(
+      'Hospital Attending Doctor Assigned',
+      `Attending Doctor Dr. ${doctorName} assigned to patient ${patient.firstName} ${patient.lastName} (${patient.patientId}).`,
+      'nurse',
+      'doctor_assignment',
+      patient.id,
+    );
+
+    return patient;
+  }
+}

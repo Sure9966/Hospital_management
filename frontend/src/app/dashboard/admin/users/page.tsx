@@ -11,7 +11,7 @@ interface UserItem {
   email: string;
   firstName: string;
   lastName: string;
-  role: 'admin' | 'receptionist' | 'nurse' | 'pharmacist' | 'management' | 'patient';
+  role: 'admin' | 'receptionist' | 'nurse' | 'doctor' | 'pharmacist' | 'management' | 'patient';
   phone?: string;
   department?: string;
   isActive: boolean;
@@ -149,6 +149,7 @@ export default function AdminUsersPage() {
             <option value="admin">IT Admin</option>
             <option value="receptionist">Receptionist</option>
             <option value="nurse">Nurse</option>
+            <option value="doctor">Doctor</option>
             <option value="pharmacist">Pharmacist</option>
             <option value="management">Management</option>
             <option value="patient">Patient</option>

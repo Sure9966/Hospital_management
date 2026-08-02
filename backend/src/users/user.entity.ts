@@ -10,6 +10,7 @@ export enum UserRole {
   ADMIN = 'admin',
   RECEPTIONIST = 'receptionist',
   NURSE = 'nurse',
+  DOCTOR = 'doctor',
   PHARMACIST = 'pharmacist',
   MANAGEMENT = 'management',
   PATIENT = 'patient',

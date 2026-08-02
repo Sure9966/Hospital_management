@@ -7,7 +7,7 @@ import toast from 'react-hot-toast';
 import Link from 'next/link';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
-type RoleKey = 'admin' | 'receptionist' | 'nurse' | 'pharmacist' | 'management' | 'patient';
+type RoleKey = 'admin' | 'receptionist' | 'nurse' | 'doctor' | 'pharmacist' | 'management' | 'patient';
 
 interface UserItem {
   id: string;
@@ -34,12 +34,13 @@ interface FormErrors {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const ROLE_META: Record<RoleKey, { label: string; badge: string; color: string; bg: string; dashboard: string }> = {
-  admin:        { label: 'IT Admin',      badge: 'badge-purple',  color: '#a78bfa', bg: 'rgba(139,92,246,0.15)',  dashboard: '/dashboard/admin'        },
-  receptionist: { label: 'Receptionist',  badge: 'badge-info',    color: '#60a5fa', bg: 'rgba(59,130,246,0.15)',  dashboard: '/dashboard/receptionist' },
-  nurse:        { label: 'Nurse',         badge: 'badge-success', color: '#34d399', bg: 'rgba(16,185,129,0.15)',  dashboard: '/dashboard/nurse'        },
-  pharmacist:   { label: 'Pharmacist',    badge: 'badge-warning', color: '#fbbf24', bg: 'rgba(245,158,11,0.15)',  dashboard: '/dashboard/pharmacist'   },
-  management:   { label: 'Management',    badge: 'badge-danger',  color: '#f87171', bg: 'rgba(239,68,68,0.15)',   dashboard: '/dashboard/management'   },
-  patient:      { label: 'Patient',       badge: 'badge-gray',    color: '#94a3b8', bg: 'rgba(148,163,184,0.15)', dashboard: '/dashboard/patient'      },
+  admin: { label: 'IT Admin', badge: 'badge-purple', color: '#a78bfa', bg: 'rgba(139,92,246,0.15)', dashboard: '/dashboard/admin' },
+  receptionist: { label: 'Receptionist', badge: 'badge-info', color: '#60a5fa', bg: 'rgba(59,130,246,0.15)', dashboard: '/dashboard/receptionist' },
+  nurse: { label: 'Nurse', badge: 'badge-success', color: '#34d399', bg: 'rgba(16,185,129,0.15)', dashboard: '/dashboard/nurse' },
+  doctor: { label: 'Doctor', badge: 'badge-purple', color: '#f472b6', bg: 'rgba(236,72,153,0.15)', dashboard: '/dashboard/doctor' },
+  pharmacist: { label: 'Pharmacist', badge: 'badge-warning', color: '#fbbf24', bg: 'rgba(245,158,11,0.15)', dashboard: '/dashboard/pharmacist' },
+  management: { label: 'Management', badge: 'badge-danger', color: '#f87171', bg: 'rgba(239,68,68,0.15)', dashboard: '/dashboard/management' },
+  patient: { label: 'Patient', badge: 'badge-gray', color: '#94a3b8', bg: 'rgba(148,163,184,0.15)', dashboard: '/dashboard/patient' },
 };
 
 const DEPARTMENTS = [
@@ -58,8 +59,8 @@ const BLANK_FORM = {
 function validate(form: typeof BLANK_FORM, isNew: boolean): FormErrors {
   const errors: FormErrors = {};
   if (!form.firstName.trim()) errors.firstName = 'First name is required';
-  if (!form.lastName.trim())  errors.lastName  = 'Last name is required';
-  if (!form.email.trim())     errors.email     = 'Email is required';
+  if (!form.lastName.trim()) errors.lastName = 'Last name is required';
+  if (!form.email.trim()) errors.email = 'Email is required';
   else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
     errors.email = 'Enter a valid email address';
   if (isNew && !form.password) errors.password = 'Password is required for new accounts';
@@ -67,29 +68,57 @@ function validate(form: typeof BLANK_FORM, isNew: boolean): FormErrors {
     errors.phone = 'Enter a valid phone number';
   return errors;
 }
+import type { ReactNode } from 'react';
 
+type FieldProps = {
+  label: string;
+  error?: string;
+  children: ReactNode;
+};
+
+function F({ label, error, children }: FieldProps) {
+  return (
+    <div className="form-group">
+      <label className="form-label">{label}</label>
+
+      {children}
+
+      {error && (
+        <span
+          style={{
+            fontSize: 11,
+            color: 'var(--danger)',
+            marginTop: 2,
+          }}
+        >
+          ⚠ {error}
+        </span>
+      )}
+    </div>
+  );
+}
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function AdminDashboardPage() {
   // data
-  const [users, setUsers]         = useState<UserItem[]>([]);
-  const [loading, setLoading]     = useState(true);
+  const [users, setUsers] = useState<UserItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
   // search / filter
-  const [search, setSearch]         = useState('');
+  const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | RoleKey>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'suspended' | 'pending'>('all');
-  const [sortField, setSortField]   = useState<'name' | 'role' | 'department' | 'createdAt'>('createdAt');
-  const [sortDir, setSortDir]       = useState<'asc' | 'desc'>('desc');
+  const [sortField, setSortField] = useState<'name' | 'role' | 'department' | 'createdAt'>('createdAt');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   // panels / modals
   const [showCreatePanel, setShowCreatePanel] = useState(false);
-  const [editUser, setEditUser]   = useState<UserItem | null>(null);
+  const [editUser, setEditUser] = useState<UserItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<UserItem | null>(null);
-  const [resetTarget, setResetTarget]   = useState<UserItem | null>(null);
+  const [resetTarget, setResetTarget] = useState<UserItem | null>(null);
   const [dbResetModal, setDbResetModal] = useState(false);
 
   // form
-  const [form, setForm]           = useState({ ...BLANK_FORM });
+  const [form, setForm] = useState({ ...BLANK_FORM });
   const [formErrors, setFormErrors] = useState<FormErrors>({});
   const [actionLoading, setActionLoading] = useState(false);
 
@@ -113,28 +142,28 @@ export default function AdminDashboardPage() {
       const q = search.toLowerCase();
       if (q && !(
         u.firstName.toLowerCase().includes(q) ||
-        u.lastName.toLowerCase().includes(q)  ||
-        u.email.toLowerCase().includes(q)     ||
+        u.lastName.toLowerCase().includes(q) ||
+        u.email.toLowerCase().includes(q) ||
         (u.department || '').toLowerCase().includes(q) ||
         (u.phone || '').includes(q)
       )) return false;
-      if (roleFilter !== 'all' && u.role !== roleFilter)   return false;
-      if (statusFilter === 'active'    && !u.isActive)     return false;
-      if (statusFilter === 'suspended' && u.isActive)      return false;
-      if (statusFilter === 'pending'   && u.isApproved !== false) return false;
+      if (roleFilter !== 'all' && u.role !== roleFilter) return false;
+      if (statusFilter === 'active' && !u.isActive) return false;
+      if (statusFilter === 'suspended' && u.isActive) return false;
+      if (statusFilter === 'pending' && u.isApproved !== false) return false;
       return true;
     })
     .sort((a, b) => {
       let va: string, vb: string;
-      if (sortField === 'name')       { va = `${a.firstName}${a.lastName}`; vb = `${b.firstName}${b.lastName}`; }
-      else if (sortField === 'role')  { va = a.role; vb = b.role; }
+      if (sortField === 'name') { va = `${a.firstName}${a.lastName}`; vb = `${b.firstName}${b.lastName}`; }
+      else if (sortField === 'role') { va = a.role; vb = b.role; }
       else if (sortField === 'department') { va = a.department || ''; vb = b.department || ''; }
-      else                            { va = a.createdAt; vb = b.createdAt; }
+      else { va = a.createdAt; vb = b.createdAt; }
       return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
     });
 
-  const pendingCount   = users.filter(u => u.isApproved === false).length;
-  const activeCount    = users.filter(u => u.isActive).length;
+  const pendingCount = users.filter(u => u.isApproved === false).length;
+  const activeCount = users.filter(u => u.isActive).length;
   const suspendedCount = users.filter(u => !u.isActive).length;
 
   const roleCounts = users.reduce((acc, u) => {
@@ -160,13 +189,13 @@ export default function AdminDashboardPage() {
     setActionLoading(true);
     try {
       await api.post('/auth/register', {
-        email:      form.email,
-        password:   form.password,
-        firstName:  form.firstName,
-        lastName:   form.lastName,
-        role:       form.role,
+        email: form.email,
+        password: form.password,
+        firstName: form.firstName,
+        lastName: form.lastName,
+        role: form.role,
         department: form.department,
-        phone:      form.phone,
+        phone: form.phone,
         isApproved: form.isApproved,
       });
       toast.success(`✅ Employee "${form.firstName} ${form.lastName}" created → redirects to ${ROLE_META[form.role].dashboard}`);
@@ -184,14 +213,14 @@ export default function AdminDashboardPage() {
     e.preventDefault();
     if (!editUser) return;
     const editForm = {
-      firstName:  editUser.firstName,
-      lastName:   editUser.lastName,
-      email:      editUser.email,
-      password:   '',
-      role:       editUser.role,
+      firstName: editUser.firstName,
+      lastName: editUser.lastName,
+      email: editUser.email,
+      password: '',
+      role: editUser.role,
       department: editUser.department,
-      phone:      editUser.phone,
-      isActive:   editUser.isActive,
+      phone: editUser.phone,
+      isActive: editUser.isActive,
       isApproved: editUser.isApproved,
     };
     const errors = validate(editForm, false);
@@ -200,12 +229,12 @@ export default function AdminDashboardPage() {
     setActionLoading(true);
     try {
       await api.put(`/users/${editUser.id}`, {
-        firstName:  editUser.firstName,
-        lastName:   editUser.lastName,
-        role:       editUser.role,
+        firstName: editUser.firstName,
+        lastName: editUser.lastName,
+        role: editUser.role,
         department: editUser.department,
-        phone:      editUser.phone,
-        isActive:   editUser.isActive,
+        phone: editUser.phone,
+        isActive: editUser.isActive,
         isApproved: editUser.isApproved,
       });
       toast.success(`✅ Employee "${editUser.firstName} ${editUser.lastName}" updated`);
@@ -282,13 +311,13 @@ export default function AdminDashboardPage() {
   };
 
   // ── Render helpers ────────────────────────────────────────────────────────
-  const F = ({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) => (
-    <div className="form-group">
-      <label className="form-label">{label}</label>
-      {children}
-      {error && <span style={{ fontSize: 11, color: 'var(--danger)', marginTop: 2 }}>⚠ {error}</span>}
-    </div>
-  );
+  // const F = ({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) => (
+  //   <div className="form-group">
+  //     <label className="form-label">{label}</label>
+  //     {children}
+  //     {error && <span style={{ fontSize: 11, color: 'var(--danger)', marginTop: 2 }}>⚠ {error}</span>}
+  //   </div>
+  // );
 
   if (loading) {
     return <CenteredLoader message="Loading IT Admin Hub..." subtext="Syncing employee directory & hospital database" />;
@@ -320,11 +349,11 @@ export default function AdminDashboardPage() {
       {/* ══ STATS ════════════════════════════════════════════════════════════ */}
       <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px,1fr))' }}>
         {([
-          { icon: '👥', val: users.length,    label: 'Total Accounts',    sub: 'All roles',             grad: 'linear-gradient(135deg,#6366f1,#0ea5e9)' },
-          { icon: '✅', val: activeCount,      label: 'Active Employees',  sub: 'Can login & use system',grad: 'linear-gradient(135deg,#10b981,#14b8a6)' },
-          { icon: '⏳', val: pendingCount,     label: 'Pending Approvals', sub: pendingCount > 0 ? '⚠ Needs attention' : 'All clear', grad: 'linear-gradient(135deg,#f59e0b,#ef4444)' },
-          { icon: '🚫', val: suspendedCount,   label: 'Suspended',         sub: 'Blocked from login',    grad: 'linear-gradient(135deg,#ef4444,#f43f5e)' },
-          { icon: '🔑', val: '6 Roles',        label: 'Role Engine',       sub: 'Email → Dashboard',     grad: 'linear-gradient(135deg,#8b5cf6,#6366f1)' },
+          { icon: '👥', val: users.length, label: 'Total Accounts', sub: 'All roles', grad: 'linear-gradient(135deg,#6366f1,#0ea5e9)' },
+          { icon: '✅', val: activeCount, label: 'Active Employees', sub: 'Can login & use system', grad: 'linear-gradient(135deg,#10b981,#14b8a6)' },
+          { icon: '⏳', val: pendingCount, label: 'Pending Approvals', sub: pendingCount > 0 ? '⚠ Needs attention' : 'All clear', grad: 'linear-gradient(135deg,#f59e0b,#ef4444)' },
+          { icon: '🚫', val: suspendedCount, label: 'Suspended', sub: 'Blocked from login', grad: 'linear-gradient(135deg,#ef4444,#f43f5e)' },
+          { icon: '🔑', val: '6 Roles', label: 'Role Engine', sub: 'Email → Dashboard', grad: 'linear-gradient(135deg,#8b5cf6,#6366f1)' },
         ] as const).map((s, i) => (
           <div className="stat-card" key={i} style={{ '--gradient': s.grad } as any}>
             <div className="stat-icon" style={{ background: 'rgba(255,255,255,0.07)', fontSize: 22 }}>{s.icon}</div>
@@ -563,16 +592,16 @@ export default function AdminDashboardPage() {
       {/* ══ CREATE EMPLOYEE SLIDE-OVER PANEL ═════════════════════════════════ */}
       {showCreatePanel && (
         <>
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 100, backdropFilter: 'blur(4px)' }}
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, backdropFilter: 'blur(4px)' }}
             onClick={() => setShowCreatePanel(false)} />
           <div style={{
             position: 'fixed', top: 0, right: 0, bottom: 0, width: 480, maxWidth: '95vw',
             background: 'var(--bg-card)', borderLeft: '1px solid var(--border)',
-            zIndex: 101, overflowY: 'auto', boxShadow: 'var(--shadow-lg)',
+            zIndex: 1001, overflowY: 'auto', boxShadow: 'var(--shadow-lg)',
             animation: 'slideLeft 0.3s ease',
           }}>
             <style>{`@keyframes slideLeft { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
-            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, background: 'var(--bg-card)', zIndex: 1 }}>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, background: 'var(--bg-card)', zIndex: 2 }}>
               <div>
                 <h3 style={{ fontSize: 17, fontWeight: 700 }}>➕ Create Employee Account</h3>
                 <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>New account will be active immediately with selected role & dashboard.</p>
@@ -636,7 +665,7 @@ export default function AdminDashboardPage() {
               <F label="Phone Number" error={formErrors.phone}>
                 <input type="tel" className="form-control" placeholder="+1 (555) 000-0000"
                   value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}
-                  style={{ borderColor: formErrors.phone ? 'var(--danger)' : undefined }} />
+                  style={{ borderColor: formErrors.phone ? 'var(--danger)' : undefined, background: 'var(--bg-surface)', color: 'var(--text-primary)' }} />
               </F>
 
               {/* Status toggles */}
@@ -646,7 +675,7 @@ export default function AdminDashboardPage() {
                 </div>
                 <div style={{ display: 'flex', gap: 24 }}>
                   {([
-                    { key: 'isActive',   label: 'Account Active',      hint: 'Can login right away' },
+                    { key: 'isActive', label: 'Account Active', hint: 'Can login right away' },
                     { key: 'isApproved', label: 'Pre-Approved by Admin', hint: 'Skip approval queue' },
                   ] as const).map(({ key, label, hint }) => (
                     <label key={key} style={{ display: 'flex', flexDirection: 'column', gap: 2, cursor: 'pointer' }}>

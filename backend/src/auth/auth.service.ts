@@ -4,11 +4,14 @@ import * as bcrypt from 'bcryptjs';
 import { UsersService } from '../users/users.service';
 import { UserRole } from '../users/user.entity';
 
+import { NotificationsService } from '../notifications/notifications.service';
+
 @Injectable()
 export class AuthService {
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
+    private notificationsService: NotificationsService,
   ) {}
 
   async validateUser(email: string, password: string) {
@@ -51,6 +54,14 @@ export class AuthService {
       password: hashed,
       isApproved: data.isApproved !== undefined ? data.isApproved : true,
     });
+
+    // Send welcome email notification to employee
+    await this.notificationsService.sendEmail(
+      user.email,
+      `🏥 Welcome to MediCore HMS - ${user.role.toUpperCase()} Portal Access`,
+      `Hello ${user.firstName} ${user.lastName},\n\nYour employee account has been created for the role: ${user.role.toUpperCase()}.\nDepartment: ${user.department || 'General'}\nLogin URL: http://localhost:3000/login\n\nPlease log in and change your password.`,
+    );
+
     const { password: _, ...safeUser } = user;
     return safeUser;
   }

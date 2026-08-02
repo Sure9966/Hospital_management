@@ -116,6 +116,7 @@ export default function HomePage() {
 | `/` | `src/app/page.tsx` | Main Entry Root (redirects to Login or Role Dashboard) |
 | `/login` | `src/app/login/page.tsx` | Login Page with Quick Demo Buttons & Credentials |
 | `/dashboard/nurse` | `src/app/dashboard/nurse/page.tsx` | Enhanced Nurse Clinical Dashboard, Triage Notes, Medical History |
+| `/dashboard/doctor` | `src/app/dashboard/doctor/page.tsx` | Doctor Management Dashboard, EHR Patient Files, Diagnosis, Test Orders |
 | `/dashboard/receptionist` | `src/app/dashboard/receptionist/page.tsx` | Receptionist Home Dashboard (Stats & Recent Activity) |
 | `/dashboard/receptionist/register` | `src/app/dashboard/receptionist/register/page.tsx` | Patient Registration & Automatic OPD Token Generation |
 | `/dashboard/receptionist/opd-queue` | `src/app/dashboard/receptionist/opd-queue/page.tsx` | Live OPD Queue, Doctor Cards, Quick Walk-in Entry |
@@ -131,6 +132,10 @@ export default function HomePage() {
 | **Nurse** | `POST` | `/api/nurse/vitals` | Record patient vitals, triage notes & priority |
 | **Nurse** | `GET` | `/api/nurse/vitals` | Fetch all recorded vitals with status badges |
 | **Nurse** | `GET` | `/api/nurse/patient/:id/history` | Retrieve full patient medical history & lab reports |
+| **Doctor** | `POST` | `/api/doctor/consultations` | Save doctor consultation notes, diagnosis & test orders |
+| **Doctor** | `GET` | `/api/doctor/consultations` | Fetch all doctor consultation records |
+| **Doctor** | `GET` | `/api/doctor/patient/:id/ehr` | Retrieve complete patient EHR records & lab results |
+| **Doctor** | `POST` | `/api/doctor/patient/:id/assign-doctor` | Update hospital assigned doctor name (patient visible) |
 | **Patients** | `POST` | `/api/patients` | Register new patient & generate `opdTokenNumber` |
 | **Pharmacy** | `POST` | `/api/pharmacy/prescriptions` | Create prescription & generate PDF invoice |
 | **Pharmacy** | `GET` | `/api/pharmacy/prescriptions/:id/pdf` | Authenticated PDF file download & print stream |
@@ -147,8 +152,27 @@ All demo accounts share the standard password:
 | **Admin** | `admin@hospital.com` | `demo123` | Full System Access & User Management |
 | **Receptionist** | `reception@hospital.com` | `demo123` | Patient Registration, OPD Tokens, Appointments |
 | **Nurse** | `nurse@hospital.com` | `demo123` | Clinical Vitals, Triage Notes, Medical History |
+| **Doctor** | `doctor@hospital.com` | `demo123` | Doctor Management Dashboard, EHR Files, Consultations, Diagnosis, Test Orders, Prescriptions |
 | **Pharmacist** | `pharmacy@hospital.com` | `demo123` | Prescriptions, Medicine Dispensing |
 | **Management** | `manager@hospital.com` | `demo123` | Analytics, Revenue Reports, Staff Monitoring |
+
+---
+
+## 5. 🩺 Doctor Management Dashboard System
+
+### Doctor Features Implemented:
+1. **Patient Files & Complete Electronic Health Records (EHR)**:
+   - Deep lookup for demographics, historical vitals logs, diagnosis timeline, and test report summaries.
+2. **Clinical Consultation Notes & Diagnosis Management**:
+   - Save consultation records with diagnosis findings, clinical notes, and treatment plans.
+3. **Test Orders & Laboratory Results**:
+   - Order laboratory tests (`CBC`, `CMP`, `Lipid Profile`, `Chest X-Ray`) and review diagnostic findings.
+4. **Follow-Up Scheduling**:
+   - Set follow-up appointment dates and patient instructions.
+5. **Prescription Creation**:
+   - Interactive prescription builder linked directly with the Pharmacy fulfillment dashboard.
+6. **Responsive Hospital Assigned Doctor Name**:
+   - Dynamic update modal for `admittedBy` doctor name displayed on patient tickets and EHR portals.
 
 ---
 

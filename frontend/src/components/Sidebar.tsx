@@ -25,6 +25,12 @@ const roleMenus: Record<string, { icon: string; label: string; href: string }[]>
     { icon: '🛏️', label: 'Bed Management', href: '/dashboard/admin/beds' },
     { icon: '🏥', label: 'My Patients', href: '/dashboard/nurse/patients' },
   ],
+  doctor: [
+    { icon: '📊', label: 'Doctor Dashboard', href: '/dashboard/doctor' },
+    { icon: '🏥', label: 'Patient Files', href: '/dashboard/doctor' },
+    { icon: '📝', label: 'Consultations', href: '/dashboard/doctor' },
+    { icon: '💊', label: 'Prescriptions', href: '/dashboard/doctor' },
+  ],
   pharmacist: [
     { icon: '📊', label: 'Dashboard', href: '/dashboard/pharmacist' },
     { icon: '💊', label: 'Prescriptions', href: '/dashboard/pharmacist/prescriptions' },
@@ -56,7 +62,7 @@ export default function Sidebar({ role }: { role: string }) {
   };
 
   const roleColors: Record<string, string> = {
-    admin: '#6366f1', receptionist: '#0ea5e9', nurse: '#10b981',
+    admin: '#6366f1', receptionist: '#0ea5e9', nurse: '#10b981', doctor: '#ec4899',
     pharmacist: '#f59e0b', management: '#ef4444', patient: '#8b5cf6',
   };
 

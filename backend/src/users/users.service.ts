@@ -46,6 +46,14 @@ export class UsersService implements OnModuleInit {
         phone: '123-456-7892',
       },
       {
+        email: 'doctor@hospital.com',
+        firstName: 'Dr. Sarah',
+        lastName: 'Jenkins',
+        role: UserRole.DOCTOR,
+        department: 'Cardiology & General Medicine',
+        phone: '123-456-7895',
+      },
+      {
         email: 'pharmacy@hospital.com',
         firstName: 'Chief',
         lastName: 'Pharmacist',
