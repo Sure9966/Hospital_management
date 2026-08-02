@@ -27,6 +27,7 @@ export default function AdminUsersPage() {
   const [roleFilter, setRoleFilter] = useState('all');
   const [editUser, setEditUser] = useState<UserItem | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [confirmDeleteUser, setConfirmDeleteUser] = useState<UserItem | null>(null);
 
   const fetchUsers = async () => {
     try {
@@ -64,13 +65,16 @@ export default function AdminUsersPage() {
   };
 
   const handleDeleteUser = async (user: UserItem) => {
-    if (!confirm(`Are you sure you want to delete ${user.email}? This cannot be undone.`)) return;
+    setActionLoading(true);
     try {
       await api.delete(`/users/${user.id}`);
       toast.success(`User ${user.email} deleted from database`);
+      setConfirmDeleteUser(null);
       fetchUsers();
     } catch (err) {
       toast.error('Failed to delete user');
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -228,7 +232,7 @@ export default function AdminUsersPage() {
                           </button>
                           <button
                             className="btn btn-danger btn-sm"
-                            onClick={() => handleDeleteUser(u)}
+                            onClick={() => setConfirmDeleteUser(u)}
                             title="Delete user from database"
                           >
                             🗑️ Delete
@@ -338,6 +342,29 @@ export default function AdminUsersPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete User Confirmation Modal */}
+      {confirmDeleteUser && (
+        <div className="modal-overlay">
+          <div className="modal" style={{ maxWidth: 460 }}>
+            <div className="modal-header">
+              <h3>🗑️ Confirm User Deletion</h3>
+              <button className="btn btn-secondary btn-sm btn-icon" onClick={() => setConfirmDeleteUser(null)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ fontSize: 14, marginBottom: 8 }}>Are you sure you want to permanently delete:</p>
+              <p style={{ fontWeight: 700, color: 'var(--primary-light)' }}>{confirmDeleteUser.firstName} {confirmDeleteUser.lastName} &lt;{confirmDeleteUser.email}&gt;</p>
+              <p style={{ fontSize: 12, color: '#ef4444', marginTop: 8 }}>⚠️ This action cannot be undone.</p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setConfirmDeleteUser(null)}>Cancel</button>
+              <button className="btn btn-danger" onClick={() => handleDeleteUser(confirmDeleteUser)} disabled={actionLoading}>
+                {actionLoading ? 'Deleting...' : '🗑️ Delete Permanently'}
+              </button>
+            </div>
           </div>
         </div>
       )}
