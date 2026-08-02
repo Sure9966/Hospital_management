@@ -6,6 +6,7 @@ import {
   UpdateDateColumn,
   OneToMany,
   ManyToOne,
+  Index,
 } from 'typeorm';
 
 @Entity('wards')
@@ -43,6 +44,8 @@ export enum BedStatus {
 }
 
 @Entity('beds')
+@Index('IDX_BEDS_STATUS', ['status'])
+@Index('IDX_BEDS_WARD_STATUS', ['wardId', 'status'])
 export class Bed {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -86,6 +89,8 @@ export enum AdmissionStatus {
 }
 
 @Entity('admissions')
+@Index('IDX_ADMISSIONS_STATUS', ['status'])
+@Index('IDX_ADMISSIONS_CREATED', ['createdAt'])
 export class Admission {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -116,6 +121,9 @@ export class Admission {
 
   @Column({ type: 'enum', enum: AdmissionStatus, default: AdmissionStatus.PENDING })
   status: AdmissionStatus;
+
+  @Column({ nullable: true })
+  preferredBedNumber: string;
 
   @Column({ nullable: true })
   admittedAt: Date;
