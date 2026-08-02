@@ -10,7 +10,6 @@ const roleMenus: Record<string, { icon: string; label: string; href: string }[]>
   admin: [
     { icon: '📊', label: 'Dashboard', href: '/dashboard/admin' },
     { icon: '👥', label: 'Users', href: '/dashboard/admin/users' },
-    { icon: '🛏️', label: 'Bed Management', href: '/dashboard/admin/beds' },
     { icon: '🏥', label: 'Patients', href: '/dashboard/admin/patients' },
   ],
   receptionist: [
@@ -18,6 +17,7 @@ const roleMenus: Record<string, { icon: string; label: string; href: string }[]>
     { icon: '🏥', label: 'Register Patient', href: '/dashboard/receptionist/register' },
     { icon: '📅', label: 'Appointments', href: '/dashboard/receptionist/appointments' },
     { icon: '🎟️', label: 'OPD Queue Tokens', href: '/dashboard/receptionist/opd-queue' },
+    { icon: '🛏️', label: 'Bed Management', href: '/dashboard/admin/beds' },
   ],
   nurse: [
     { icon: '📊', label: 'Dashboard', href: '/dashboard/nurse' },
