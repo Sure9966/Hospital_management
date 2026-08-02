@@ -25,7 +25,7 @@ export default function DoctorDashboard() {
   const [consultations, setConsultations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [activeTab, setActiveTab] = useState<'queue' | 'patients' | 'consultation' | 'vitals' | 'tests' | 'prescriptions'>('queue');
+  const [activeTab, setActiveTab] = useState<'queue' | 'patients' | 'consultation' | 'vitals' | 'tests' | 'prescriptions' | 'bedrequests'>('queue');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Selected EHR Patient state
@@ -54,6 +54,19 @@ export default function DoctorDashboard() {
   const [assignForm, setAssignForm] = useState({ patientId: '', patientName: '', doctorName: 'Dr. Sarah Jenkins' });
   const [savingAssign, setSavingAssign] = useState(false);
 
+  // Bed Request Modal
+  const [showBedRequestModal, setShowBedRequestModal] = useState(false);
+  const [bedRequestForm, setBedRequestForm] = useState({
+    patientId: '',
+    patientName: '',
+    doctorName: 'Dr. Sarah Jenkins',
+    diagnosis: '',
+    requestedWard: 'General',
+    notes: '',
+  });
+  const [savingBedRequest, setSavingBedRequest] = useState(false);
+  const [bedRequests, setBedRequests] = useState<any[]>([]);
+
   const loadData = () => {
     setLoading(true);
     Promise.all([
@@ -61,12 +74,16 @@ export default function DoctorDashboard() {
       api.get('/nurse/vitals'),
       api.get('/receptionist/appointments/today'),
       api.get('/doctor/consultations'),
+      api.get('/beds/admissions'),
     ])
-      .then(([patRes, vitRes, apptRes, consultRes]) => {
+      .then(([patRes, vitRes, apptRes, consultRes, admRes]) => {
         setPatients(patRes.data || []);
         setVitals(vitRes.data || []);
         setAppointments(apptRes.data || []);
         setConsultations(consultRes.data || []);
+        // Only show requests submitted by doctors (i.e. from this dashboard)
+        const myRequests = (admRes.data || []).filter((a: any) => a.notes && a.notes.includes('[Doctor Bed Request]'));
+        setBedRequests(myRequests);
       })
       .catch(() => toast.error('Failed to load doctor dashboard records'))
       .finally(() => setLoading(false));
@@ -153,6 +170,25 @@ export default function DoctorDashboard() {
     }
   };
 
+  const handleSendBedRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingBedRequest(true);
+    try {
+      await api.post('/beds/admissions', {
+        ...bedRequestForm,
+        notes: `[Doctor Bed Request] ${bedRequestForm.notes}`.trim(),
+      });
+      toast.success('🛏️ Bed request sent to Reception & Management!');
+      setShowBedRequestModal(false);
+      setBedRequestForm({ patientId: '', patientName: '', doctorName: 'Dr. Sarah Jenkins', diagnosis: '', requestedWard: 'General', notes: '' });
+      loadData();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to send bed request');
+    } finally {
+      setSavingBedRequest(false);
+    }
+  };
+
   const addPrescriptionItem = () => {
     setPrescriptionForm(f => ({ ...f, items: [...f.items, { ...emptyPrescriptionItem }] }));
   };
@@ -195,6 +231,9 @@ export default function DoctorDashboard() {
           <button className="btn btn-secondary" onClick={() => setShowPrescriptionModal(true)}>
             💊 Create Prescription
           </button>
+          <button className="btn" style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', color: '#fff', border: 'none' }} onClick={() => setShowBedRequestModal(true)}>
+            🛏️ Request Bed
+          </button>
         </div>
       </div>
 
@@ -208,14 +247,18 @@ export default function DoctorDashboard() {
             { id: 'vitals', label: '💗 Clinical Vitals Log', icon: '🌡️' },
             { id: 'tests', label: '🧪 Test Orders & Lab Results', icon: '🔬' },
             { id: 'prescriptions', label: '💊 Prescriptions Created', icon: '📑' },
-          ].map(tab => (
+            { id: 'bedrequests', label: '🛏️ Bed Requests', icon: '🏥', badge: bedRequests.filter((r: any) => r.status === 'pending').length },
+          ].map((tab: any) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
               className={`btn btn-sm ${activeTab === tab.id ? 'btn-primary' : 'btn-secondary'}`}
-              style={{ borderRadius: 20, padding: '8px 16px', fontSize: 13, whiteSpace: 'nowrap' }}
+              style={{ borderRadius: 20, padding: '8px 16px', fontSize: 13, whiteSpace: 'nowrap', position: 'relative' }}
             >
               <span>{tab.icon}</span> {tab.label}
+              {tab.badge !== undefined && tab.badge > 0 && (
+                <span style={{ marginLeft: 5, background: '#ef4444', color: '#fff', borderRadius: 10, padding: '1px 5px', fontSize: 10 }}>{tab.badge}</span>
+              )}
             </button>
           ))}
         </div>
@@ -500,6 +543,53 @@ export default function DoctorDashboard() {
             </div>
           </div>
         )}
+
+        {/* TAB 7: Bed Requests */}
+        {activeTab === 'bedrequests' && (
+          <div className="card">
+            <div className="card-header">
+              <span className="card-title">🛏️ Doctor Bed Admission Requests ({bedRequests.length})</span>
+              <button className="btn btn-primary btn-sm" onClick={() => setShowBedRequestModal(true)}>🛏️ + New Bed Request</button>
+            </div>
+            <div className="card-body">
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>When you submit a bed request, a notification is automatically sent to Reception and Management. Reception will allocate the bed and handle the payment.</p>
+            </div>
+            {bedRequests.length === 0 ? (
+              <div className="empty-state"><div className="empty-icon">🛏️</div><h3>No bed requests submitted yet</h3><p>Click "New Bed Request" to recommend a bed for a patient</p></div>
+            ) : (
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Patient</th>
+                      <th>Patient ID</th>
+                      <th>Diagnosis</th>
+                      <th>Requested Ward</th>
+                      <th>Status</th>
+                      <th>Allocated Bed</th>
+                      <th>Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bedRequests.map((r: any) => (
+                      <tr key={r.id}>
+                        <td><strong>{r.patientName}</strong></td>
+                        <td><code>{r.patientId}</code></td>
+                        <td>{r.diagnosis || '—'}</td>
+                        <td><span className="badge badge-info">{r.requestedWard || 'General'}</span></td>
+                        <td>
+                          <span className={`badge ${r.status === 'admitted' ? 'badge-success' : r.status === 'pending' ? 'badge-warning' : 'badge-gray'}`}>{r.status}</span>
+                        </td>
+                        <td>{r.allocatedBedNumber ? <strong style={{ color: '#10b981' }}>{r.allocatedBedNumber}</strong> : <span className="text-muted">Awaiting reception</span>}</td>
+                        <td style={{ fontSize: 11 }}>{new Date(r.createdAt).toLocaleDateString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* MODAL 1: Add Consultation Note & Diagnosis */}
@@ -769,6 +859,61 @@ export default function DoctorDashboard() {
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setShowEhrModal(false)}>Close</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 5: Request Bed for Patient */}
+      {showBedRequestModal && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowBedRequestModal(false)}>
+          <div className="modal" style={{ maxWidth: 580 }}>
+            <div className="modal-header">
+              <h3>🛏️ Request Bed for Patient — Notify Reception</h3>
+              <button className="btn btn-secondary btn-icon" onClick={() => setShowBedRequestModal(false)}>✕</button>
+            </div>
+            <form onSubmit={handleSendBedRequest}>
+              <div className="modal-body">
+                <div style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 8, padding: 12, marginBottom: 16, fontSize: 12, color: 'var(--text-muted)' }}>
+                  🚨 This request will be sent to <strong style={{ color: '#818cf8' }}>Reception</strong> and <strong style={{ color: '#818cf8' }}>Management</strong> via notification. Reception will handle bed allocation and payment.
+                </div>
+                <div className="form-grid form-grid-2" style={{ marginBottom: 14 }}>
+                  <div className="form-group">
+                    <label className="form-label">Patient Name *</label>
+                    <input className="form-control" placeholder="John Doe" value={bedRequestForm.patientName} onChange={e => setBedRequestForm({ ...bedRequestForm, patientName: e.target.value })} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Patient ID *</label>
+                    <input className="form-control" placeholder="PAT-2024-0001" value={bedRequestForm.patientId} onChange={e => setBedRequestForm({ ...bedRequestForm, patientId: e.target.value })} required />
+                  </div>
+                </div>
+                <div className="form-grid form-grid-2" style={{ marginBottom: 14 }}>
+                  <div className="form-group">
+                    <label className="form-label">Attending Doctor Name</label>
+                    <input className="form-control" value={bedRequestForm.doctorName} onChange={e => setBedRequestForm({ ...bedRequestForm, doctorName: e.target.value })} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Requested Ward</label>
+                    <select className="form-control" value={bedRequestForm.requestedWard} onChange={e => setBedRequestForm({ ...bedRequestForm, requestedWard: e.target.value })}>
+                      {['General', 'ICU', 'Pediatrics', 'Cardiology', 'Orthopedics', 'Neurology', 'Maternity', 'Emergency'].map(w => <option key={w}>{w}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div className="form-group" style={{ marginBottom: 14 }}>
+                  <label className="form-label">Diagnosis / Reason for Admission *</label>
+                  <input className="form-control" placeholder="e.g. Post-operative monitoring, Cardiac observation..." value={bedRequestForm.diagnosis} onChange={e => setBedRequestForm({ ...bedRequestForm, diagnosis: e.target.value })} required />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Additional Notes for Reception</label>
+                  <textarea className="form-control" rows={2} placeholder="Any special requirements, urgency notes, or instructions for reception..." value={bedRequestForm.notes} onChange={e => setBedRequestForm({ ...bedRequestForm, notes: e.target.value })} />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowBedRequestModal(false)}>Cancel</button>
+                <button type="submit" className="btn" style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', color: '#fff', border: 'none' }} disabled={savingBedRequest}>
+                  {savingBedRequest ? '⏳ Sending...' : '🛏️ Send Bed Request to Reception'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
