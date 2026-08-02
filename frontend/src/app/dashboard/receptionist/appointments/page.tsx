@@ -18,6 +18,7 @@ export default function AppointmentsPage() {
   const [form, setForm] = useState({ ...emptyForm });
   const [loading, setLoading] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const load = () => api.get('/receptionist/appointments').then(r => setAppointments(r.data));
   useEffect(() => { load(); }, []);
@@ -45,8 +46,7 @@ export default function AppointmentsPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Delete this appointment?')) return;
-    await api.delete(`/receptionist/appointments/${id}`); toast.success('Deleted'); load();
+    await api.delete(`/receptionist/appointments/${id}`); toast.success('Deleted'); setConfirmDeleteId(null); load();
   };
 
   const handleStatusChange = async (id: string, status: string) => {
@@ -96,7 +96,7 @@ export default function AppointmentsPage() {
                       <td>
                         <div className="flex gap-2">
                           <button className="btn btn-secondary btn-sm" onClick={() => handleEdit(a)}>✏️</button>
-                          <button className="btn btn-danger btn-sm" onClick={() => handleDelete(a.id)}>🗑️</button>
+                          <button className="btn btn-danger btn-sm" onClick={() => setConfirmDeleteId(a.id)}>🗑️</button>
                         </div>
                       </td>
                     </tr>
@@ -165,6 +165,25 @@ export default function AppointmentsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Appointment Confirmation Modal */}
+      {confirmDeleteId && (
+        <div className="modal-overlay">
+          <div className="modal" style={{ maxWidth: 420 }}>
+            <div className="modal-header">
+              <h3>🗑️ Delete Appointment</h3>
+              <button className="btn btn-secondary btn-icon" onClick={() => setConfirmDeleteId(null)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ fontSize: 14 }}>Are you sure you want to delete this appointment? This cannot be undone.</p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setConfirmDeleteId(null)}>Cancel</button>
+              <button className="btn btn-danger" onClick={() => handleDelete(confirmDeleteId)}>🗑️ Yes, Delete</button>
+            </div>
           </div>
         </div>
       )}
