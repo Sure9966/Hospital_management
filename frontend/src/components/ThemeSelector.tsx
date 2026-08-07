@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { hospitalThemes, applyTheme, getCurrentTheme } from '@/lib/theme';
 
 export default function ThemeSelector({ compact = false }: { compact?: boolean }) {
-  const [activeThemeId, setActiveThemeId] = useState('medicore-blue');
+  const [activeThemeId, setActiveThemeId] = useState('medicore-white');
   const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
