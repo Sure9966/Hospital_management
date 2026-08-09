@@ -22,7 +22,7 @@ export default function CenteredLoader({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'rgba(10, 15, 30, 0.85)',
+        background: 'rgba(255, 255, 255, 0.88)',
         backdropFilter: 'blur(12px)',
       }
     : {

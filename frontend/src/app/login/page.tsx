@@ -1,22 +1,31 @@
 'use client';
+
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
 import { setAuth } from '@/lib/auth';
 import toast from 'react-hot-toast';
 import CenteredLoader from '@/components/CenteredLoader';
-import ThemeSelector from '@/components/ThemeSelector';
 import { applyTheme, getCurrentTheme } from '@/lib/theme';
 
 export default function LoginPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [pageInitializing, setPageInitializing] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
 
   const [form, setForm] = useState({
     email: '',
     password: '',
   });
+
+  const demoAccounts = [
+    { role: 'admin', email: 'admin@hospital.com', label: 'Admin', icon: '🛡️' },
+    { role: 'doctor', email: 'doctor@hospital.com', label: 'Doctor', icon: '🩺' },
+    { role: 'receptionist', email: 'reception@hospital.com', label: 'Reception', icon: '📋' },
+    { role: 'nurse', email: 'nurse@hospital.com', label: 'Nurse', icon: '💉' },
+    { role: 'pharmacist', email: 'pharmacy@hospital.com', label: 'Pharmacy', icon: '💊' },
+  ];
 
   useEffect(() => {
     applyTheme(getCurrentTheme());
@@ -27,14 +36,9 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      // 1. Send Email & Password to backend API
       const { data } = await api.post('/auth/login', form);
-
-      // 2. Store Auth Token & Allocated User Role
       setAuth(data.accessToken, data.user);
-      toast.success(`Welcome back, ${data.user.firstName || 'User'}! Opening ${data.user.role.toUpperCase()} portal...`);
-
-      // 3. Auto-redirect to the specific role dashboard allocated to this email
+      toast.success(`Welcome, ${data.user.firstName || 'User'}! Redirecting to ${data.user.role.toUpperCase()} portal...`);
       router.push(`/dashboard/${data.user.role}`);
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Invalid email or password');
@@ -42,70 +46,183 @@ export default function LoginPage() {
     }
   };
 
-  // const demoAccounts = [
-  //   { role: 'admin', email: 'admin@hospital.com', label: 'IT Admin' },
-  //   { role: 'receptionist', email: 'reception@hospital.com', label: 'Receptionist' },
-  //   { role: 'nurse', email: 'nurse@hospital.com', label: 'Nurse' },
-  //   { role: 'pharmacist', email: 'pharmacy@hospital.com', label: 'Pharmacist' },
-  //   { role: 'management', email: 'manager@hospital.com', label: 'Management' },
-  // ];
+  const handleQuickSelect = (email: string) => {
+    setForm({ email, password: 'password123' });
+    toast.success(`Pre-filled ${email}`);
+  };
 
   if (pageInitializing) {
-    return <CenteredLoader message="Initializing MediCore..." subtext="Loading theme preferences" />;
+    return <CenteredLoader message="Initializing MediCore HMS..." subtext="Loading theme & hospital services..." />;
   }
 
   if (loading) {
-    return <CenteredLoader message="Verifying Credentials..." subtext="Checking allocated role & opening dashboard..." />;
+    return <CenteredLoader message="Verifying Credentials..." subtext="Accessing allocated role portal..." />;
   }
 
   return (
-    <div className="login-page">
-      <div className="login-bg" />
+    <div className="login-container-split">
+      {/* LEFT SIDE: Hospital Interactive Animation & Highlights (Desktop/Laptop view) */}
+      <div className="login-left-animation-panel">
+        {/* Background Ambient Glow & Grid Patterns */}
+        <div className="left-bg-glow glow-1" />
+        <div className="left-bg-glow glow-2" />
 
-      {/* Theme Selector top right */}
-      <div style={{ position: 'absolute', top: 20, right: 24, zIndex: 10 }}>
-        <ThemeSelector />
-      </div>
-
-      <div className="login-card">
-        <div className="login-logo">
-          <div className="logo-circle">🏥</div>
-          <h1>Medi<span>Core</span> HMS</h1>
-          <p>Hospital Role-Based Login System</p>
+        {/* Top Header Branding */}
+        <div className="hospital-brand-header">
+          <div className="brand-badge-pill">
+            <span className="live-dot" />
+            <span>HMS Enterprise Portal 3.0</span>
+          </div>
+          <h2>Medi<span>Core</span> System</h2>
         </div>
 
-        {/* Clean Email & Password Form */}
-        <form onSubmit={handleLogin}>
-          <div className="form-group" style={{ marginBottom: 16 }}>
-            <label className="form-label">Email Address</label>
-            <input
-              type="email"
-              className="form-control"
-              placeholder="Enter your registered email"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-              required
-            />
+        {/* CENTER: Main Hospital Animation Showcase */}
+        <div className="hospital-animation-showcase">
+          {/* Animated Central Hospital Emblem */}
+          <div className="hospital-icon-wrapper">
+            <div className="pulse-ring ring-1" />
+            <div className="pulse-ring ring-2" />
+            <div className="hospital-emblem">🏥</div>
           </div>
 
-          <div className="form-group" style={{ marginBottom: 24 }}>
-            <label className="form-label">Password</label>
-            <input
-              type="password"
-              className="form-control"
-              placeholder="Enter your default or custom password"
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-              required
-            />
+          {/* Dynamic Heartbeat / ECG Animated Line */}
+          <div className="ecg-wave-box">
+            <svg className="ecg-svg" viewBox="0 0 500 80" preserveAspectRatio="none">
+              <path
+                className="ecg-path-bg"
+                d="M0,40 L100,40 L110,20 L120,60 L130,10 L140,70 L150,40 L250,40 L260,15 L270,65 L280,40 L500,40"
+              />
+              <path
+                className="ecg-path-animated"
+                d="M0,40 L100,40 L110,20 L120,60 L130,10 L140,70 L150,40 L250,40 L260,15 L270,65 L280,40 L500,40"
+              />
+            </svg>
+            <div className="ecg-caption">
+              <span>🫀 Live Telemetry Monitor</span>
+              <span className="ecg-status">BPM 72 — Normal</span>
+            </div>
           </div>
 
-          <button type="submit" className="btn btn-primary w-full" disabled={loading} style={{ height: 46 }}>
-            🔐 Sign In & Open Dashboard
-          </button>
-        </form>
+          {/* Floating Hospital Feature Cards with Smooth CSS Bounce Animations */}
+          <div className="floating-cards-container">
+            <div className="floating-card float-card-1">
+              <div className="float-icon">🩺</div>
+              <div>
+                <div className="float-title">OPD Queue</div>
+                <div className="float-sub">Real-Time Doctor Assignment</div>
+              </div>
+            </div>
 
+            <div className="floating-card float-card-2">
+              <div className="float-icon">💊</div>
+              <div>
+                <div className="float-title">Pharmacy Sync</div>
+                <div className="float-sub">Automated Prescription Dispensing</div>
+              </div>
+            </div>
 
+            <div className="floating-card float-card-3">
+              <div className="float-icon">🚑</div>
+              <div>
+                <div className="float-title">Emergency ER</div>
+                <div className="float-sub">24/7 Critical Patient Response</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* BOTTOM: Hospital Metrics Footer */}
+        <div className="hospital-stats-footer">
+          <div className="stat-pill">
+            <span className="stat-num">500+</span>
+            <span className="stat-lbl">Daily Beds Managed</span>
+          </div>
+          <div className="stat-pill">
+            <span className="stat-num">99.9%</span>
+            <span className="stat-lbl">System Uptime</span>
+          </div>
+          <div className="stat-pill">
+            <span className="stat-num">100%</span>
+            <span className="stat-lbl">HIPAA Secured</span>
+          </div>
+        </div>
+      </div>
+
+      {/* RIGHT SIDE: Clean Responsive Login Form */}
+      <div className="login-right-form-panel">
+        <div className="login-form-card">
+          <div className="login-card-header">
+            <div className="mobile-logo-circle">🏥</div>
+            <h1>Welcome Back</h1>
+            <p>Sign in to access your role-based hospital dashboard</p>
+          </div>
+
+          <form onSubmit={handleLogin} className="login-actual-form">
+            <div className="form-group" style={{ marginBottom: 18 }}>
+              <label className="form-label">Email Address</label>
+              <div className="input-with-icon">
+                <span className="input-icon">📧</span>
+                <input
+                  type="email"
+                  className="form-control styled-input"
+                  placeholder="name@hospital.com"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="form-group" style={{ marginBottom: 24 }}>
+              <label className="form-label">Password</label>
+              <div className="input-with-icon">
+                <span className="input-icon">🔒</span>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  className="form-control styled-input"
+                  placeholder="Enter your password"
+                  value={form.password}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  required
+                />
+                <button
+                  type="button"
+                  className="password-toggle-btn"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? '🙈' : '👁️'}
+                </button>
+              </div>
+            </div>
+
+            <button type="submit" className="btn btn-primary login-submit-btn" disabled={loading}>
+              🔐 Sign In & Open Dashboard
+            </button>
+          </form>
+
+          {/* Quick Pre-fill Demo Credentials */}
+          {/* <div className="demo-accounts-wrapper">
+            <div className="demo-divider">
+              <span>Quick Demo Accounts</span>
+            </div>
+            <div className="demo-btns-grid">
+              {demoAccounts.map((acc) => (
+                <button
+                  key={acc.role}
+                  type="button"
+                  className="demo-account-btn"
+                  onClick={() => handleQuickSelect(acc.email)}
+                >
+                  <span>{acc.icon}</span> {acc.label}
+                </button>
+              ))}
+            </div>
+          </div> */}
+
+          <div className="login-card-footer">
+            <span>🛡️ Encrypted HMS Session • MediCore v3.2</span>
+          </div>
+        </div>
       </div>
     </div>
   );

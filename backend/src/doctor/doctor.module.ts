@@ -7,14 +7,15 @@ import { Patient } from '../patients/patient.entity';
 import { Vital } from '../nurse/vital.entity';
 import { Prescription } from '../pharmacy/prescription.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { Appointment } from '../receptionist/appointment.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([DoctorConsultation, Patient, Vital, Prescription]),
+    TypeOrmModule.forFeature([DoctorConsultation, Patient, Vital, Prescription, Appointment]),
     NotificationsModule,
   ],
   controllers: [DoctorController],
   providers: [DoctorService],
   exports: [DoctorService],
 })
-export class DoctorModule {}
+export class DoctorModule { }

@@ -6,7 +6,7 @@ import { CurrentUser } from '../auth/current-user.decorator';
 @Controller('doctor')
 @UseGuards(JwtAuthGuard)
 export class DoctorController {
-  constructor(private readonly doctorService: DoctorService) {}
+  constructor(private readonly doctorService: DoctorService) { }
 
   @Post('consultations')
   createConsultation(@Body() body: any, @CurrentUser() user: any) {
@@ -34,7 +34,12 @@ export class DoctorController {
   }
 
   @Post('patient/:id/assign-doctor')
-  assignDoctor(@Param('id') id: string, @Body('doctorName') doctorName: string) {
-    return this.doctorService.assignDoctorToPatient(id, doctorName);
+  assignDoctor(@Param('id') id: string, @Body('doctorName') doctorName: string, @Body('doctorId') doctorId?: string) {
+    return this.doctorService.assignDoctorToPatient(id, doctorName, doctorId);
+  }
+
+  @Get('appointments/my')
+  getMyAppointments(@CurrentUser() user: any) {
+    return this.doctorService.getMyAppointments(user.id);
   }
 }

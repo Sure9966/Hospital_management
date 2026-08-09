@@ -77,6 +77,15 @@ export class Patient {
   bedNumber: string;
 
   @Column({ nullable: true })
+  assignedDoctorId: string;
+
+  @Column({ nullable: true })
+  assignedDoctorName: string;
+
+  @Column({ nullable: true })
+  department: string;
+
+  @Column({ nullable: true })
   admittedBy: string; // doctor name
 
   @Column({ nullable: true })

@@ -10,7 +10,7 @@ export class NotificationsService {
     @InjectRepository(Notification)
     private notificationRepo: Repository<Notification>,
     private notificationsGateway: NotificationsGateway,
-  ) {}
+  ) { }
 
   async create(data: Partial<Notification>) {
     const notification = this.notificationRepo.create(data);
@@ -25,14 +25,32 @@ export class NotificationsService {
       .where('n.isRead = :isRead', { isRead: false })
       .orderBy('n.createdAt', 'DESC');
 
-    if (role) {
-      query.andWhere('(n.targetRole = :role OR n.targetRole IS NULL)', { role });
-    }
-    if (userId) {
-      query.andWhere('(n.targetUserId = :userId OR n.targetUserId IS NULL)', { userId });
+    // if (role) {
+    //   query.andWhere('(n.targetRole = :role OR n.targetRole IS NULL)', { role });
+    // }
+    // if (userId) {
+    //   query.andWhere('(n.targetUserId = :userId OR n.targetUserId IS NULL)', { userId });
+    // }
+
+    if (userId && role) {
+      query.andWhere(
+        `(
+          n.targetUserId = :userId
+          OR (
+            n.targetUserId IS NULL
+            AND n.targetRole = :role
+          )
+          OR (
+            n.targetUserId IS NULL
+            AND n.targetRole IS NULL
+          )
+        )`,
+        { userId, role },
+      );
     }
 
     return query.take(50).getMany();
+    // return query.take(50).getMany();
   }
 
   async markAsRead(id: string) {
@@ -50,10 +68,51 @@ export class NotificationsService {
     return { success: true };
   }
 
-  async sendEmail(to: string, subject: string, text: string) {
-    // Simulated SMTP transport log with production-grade email dispatch logic
-    console.log(`📧 [EMAIL SENT] To: ${to} | Subject: "${subject}" | Content: "${text}"`);
-    return { success: true, message: `Email delivered to ${to}` };
+  // async sendEmail(to: string, subject: string, text: string) {
+  //   // Simulated SMTP transport log with production-grade email dispatch logic
+  //   console.log(`📧 [EMAIL SENT] To: ${to} | Subject: "${subject}" | Content: "${text}"`);
+  //   return { success: true, message: `Email delivered to ${to}` };
+  // }
+  async sendEmail(
+    to: string,
+    subject: string,
+    text: string,
+  ) {
+    const nodemailer = require('nodemailer');
+
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT),
+      secure: false,
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASSWORD,
+      },
+    });
+
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM,
+      to,
+      subject,
+      text,
+    });
+
+    return {
+      success: true,
+    };
+  }
+
+  async sendToUser(
+    title: string,
+    message: string,
+    targetUserId: string,
+    type: string = 'general',
+    relatedId?: string,
+    createdById?: string,
+  ) {
+    const saved = await this.create({ title, message, targetUserId, type, relatedId, createdById });
+    this.notificationsGateway.emitNotification(saved);
+    return saved;
   }
 
   async sendToRole(

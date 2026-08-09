@@ -15,9 +15,10 @@ export default function OpdQueuePage() {
   // Quick appointment modal state
   const [showQuickApptModal, setShowQuickApptModal] = useState(false);
   const [quickForm, setQuickForm] = useState({
-    patientId: '', patientName: '', doctorName: '', department: 'General',
+    patientId: '', patientName: '', doctorId: '', doctorName: '', department: 'General',
     appointmentDate: new Date().toISOString().split('T')[0], appointmentTime: '09:00', reason: 'OPD Walk-in Consult'
   });
+  const [eligibleDoctors, setEligibleDoctors] = useState<any[]>([]);
 
   const loadData = () => {
     setLoading(true);
@@ -28,6 +29,13 @@ export default function OpdQueuePage() {
   };
 
   useEffect(() => { loadData(); }, []);
+
+  useEffect(() => {
+    const url = quickForm.department ? `/users/doctors?department=${encodeURIComponent(quickForm.department)}` : '/users/doctors';
+    api.get(url)
+      .then(res => setEligibleDoctors(res.data || []))
+      .catch(() => setEligibleDoctors([]));
+  }, [quickForm.department]);
 
   const handleStatusChange = async (id: string, status: string) => {
     try {
@@ -296,13 +304,37 @@ export default function OpdQueuePage() {
                 </div>
                 <div className="form-grid form-grid-2" style={{ marginBottom: 12 }}>
                   <div className="form-group">
-                    <label className="form-label">Doctor Name *</label>
-                    <input className="form-control" placeholder="Dr. Smith" value={quickForm.doctorName} onChange={e => setQuickForm(f => ({ ...f, doctorName: e.target.value }))} required />
+                    <label className="form-label">Department *</label>
+                    <select
+                      className="form-control"
+                      value={quickForm.department}
+                      onChange={e => setQuickForm(f => ({ ...f, department: e.target.value, doctorId: '', doctorName: '' }))}
+                    >
+                      {['General', 'Cardiology', 'Neurology', 'Orthopedics', 'Pediatrics', 'Surgery', 'Oncology'].map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Department *</label>
-                    <select className="form-control" value={quickForm.department} onChange={e => setQuickForm(f => ({ ...f, department: e.target.value }))}>
-                      {['General', 'Cardiology', 'Neurology', 'Orthopedics', 'Pediatrics'].map(d => <option key={d}>{d}</option>)}
+                    <label className="form-label">Doctor Name * ({eligibleDoctors.length} eligible)</label>
+                    <select
+                      className="form-control"
+                      value={quickForm.doctorId}
+                      onChange={e => {
+                        const docId = e.target.value;
+                        const doc = eligibleDoctors.find(d => d.id === docId);
+                        setQuickForm(f => ({
+                          ...f,
+                          doctorId: docId,
+                          doctorName: doc ? `${doc.firstName} ${doc.lastName}` : '',
+                        }));
+                      }}
+                      required
+                    >
+                      <option value="">Select Doctor</option>
+                      {eligibleDoctors.map(d => (
+                        <option key={d.id} value={d.id}>
+                          Dr. {d.firstName} {d.lastName} ({d.department})
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>

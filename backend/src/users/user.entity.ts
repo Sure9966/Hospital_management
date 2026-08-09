@@ -36,7 +36,7 @@ export class User {
   @Column({ type: 'enum', enum: UserRole, default: UserRole.RECEPTIONIST })
   role: UserRole;
 
-  @Column({ nullable: true })
+  @Column({ unique: true })
   phone: string;
 
   @Column({ nullable: true })

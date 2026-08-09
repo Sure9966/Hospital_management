@@ -1,14 +1,19 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Body, Query, UseGuards } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('users')
 @UseGuards(JwtAuthGuard)
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(private readonly usersService: UsersService) { }
 
   @Get()
   findAll() { return this.usersService.findAll(); }
+
+  @Get('doctors')
+  findDoctors(@Query('department') department?: string) {
+    return this.usersService.findDoctors(department);
+  }
 
   @Post('clear-database')
   clearDatabase() { return this.usersService.clearDatabase(); }
@@ -34,4 +39,9 @@ export class UsersController {
 
   @Delete(':id')
   remove(@Param('id') id: string) { return this.usersService.remove(id); }
+
+  @Post('employee')
+  createEmployee(@Body() body: any) {
+    return this.usersService.createEmployee(body);
+  }
 }

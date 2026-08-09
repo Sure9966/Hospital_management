@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
-
+import { useSearchParams } from 'next/navigation';
 const emptyPrescriptionItem = { medicineName: '', dosage: '1 tablet twice daily', duration: '5 days', quantity: 10, unitPrice: 15 };
 
 const emptyConsultationForm = {
@@ -19,6 +19,7 @@ const emptyConsultationForm = {
 };
 
 export default function DoctorDashboard() {
+  const searchParams = useSearchParams();
   const [patients, setPatients] = useState<any[]>([]);
   const [vitals, setVitals] = useState<any[]>([]);
   const [appointments, setAppointments] = useState<any[]>([]);
@@ -51,8 +52,17 @@ export default function DoctorDashboard() {
 
   // Assign Doctor Modal Form
   const [showAssignModal, setShowAssignModal] = useState(false);
-  const [assignForm, setAssignForm] = useState({ patientId: '', patientName: '', doctorName: 'Dr. Sarah Jenkins' });
+  const [assignForm, setAssignForm] = useState({ patientId: '', patientName: '', doctorId: '', doctorName: 'Dr. Sarah Jenkins' });
   const [savingAssign, setSavingAssign] = useState(false);
+  const [assignDepartment, setAssignDepartment] = useState('');
+  const [eligibleDoctors, setEligibleDoctors] = useState<any[]>([]);
+
+  useEffect(() => {
+    const url = assignDepartment ? `/users/doctors?department=${encodeURIComponent(assignDepartment)}` : '/users/doctors';
+    api.get(url)
+      .then(res => setEligibleDoctors(res.data || []))
+      .catch(() => setEligibleDoctors([]));
+  }, [assignDepartment]);
 
   // Bed Request Modal
   const [showBedRequestModal, setShowBedRequestModal] = useState(false);
@@ -92,6 +102,23 @@ export default function DoctorDashboard() {
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+
+    if (
+      tab === 'patients' ||
+      tab === 'consultation' ||
+      tab === 'vitals' ||
+      tab === 'tests' ||
+      tab === 'prescriptions' ||
+      tab === 'bedrequests'
+    ) {
+      setActiveTab(tab);
+    } else {
+      setActiveTab('queue');
+    }
+  }, [searchParams]);
 
   const handleOpenEhr = async (patientIdentifier: string) => {
     setLoadingEhr(true);
@@ -159,6 +186,7 @@ export default function DoctorDashboard() {
     try {
       await api.post(`/doctor/patient/${assignForm.patientId}/assign-doctor`, {
         doctorName: assignForm.doctorName,
+        doctorId: assignForm.doctorId,
       });
       toast.success(`🩺 Assigned Attending Doctor (${assignForm.doctorName}) updated!`);
       setShowAssignModal(false);
@@ -386,7 +414,7 @@ export default function DoctorDashboard() {
                               className="btn btn-secondary btn-sm"
                               style={{ padding: '2px 8px', fontSize: 11 }}
                               onClick={() => {
-                                setAssignForm({ patientId: p.patientId, patientName: `${p.firstName} ${p.lastName}`, doctorName: p.admittedBy || 'Dr. Sarah Jenkins' });
+                                setAssignForm({ patientId: p.patientId, patientName: `${p.firstName} ${p.lastName}`, doctorId: p.assignedDoctorId || '', doctorName: p.admittedBy || 'Dr. Sarah Jenkins' });
                                 setShowAssignModal(true);
                               }}
                             >
@@ -733,13 +761,13 @@ export default function DoctorDashboard() {
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowAssignModal(false)}>
           <div className="modal" style={{ maxWidth: 480 }}>
             <div className="modal-header">
-              <h3>🩺 Update Hospital Assigned Doctor Name</h3>
+              <h3>🩺 Update Hospital Assigned Doctor</h3>
               <button className="btn btn-secondary btn-icon" onClick={() => setShowAssignModal(false)}>✕</button>
             </div>
             <form onSubmit={handleSaveAssignDoctor}>
               <div className="modal-body">
                 <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 14 }}>
-                  This is the responsive hospital assign doctor name that patients only see on their portal and tickets.
+                  Assign an attending doctor to this patient record. Notifications will be sent directly to the selected doctor.
                 </p>
 
                 <div className="form-group" style={{ marginBottom: 14 }}>
@@ -747,9 +775,41 @@ export default function DoctorDashboard() {
                   <input className="form-control" value={assignForm.patientName} disabled />
                 </div>
 
+                <div className="form-group" style={{ marginBottom: 14 }}>
+                  <label className="form-label">Filter Department</label>
+                  <select
+                    className="form-control"
+                    value={assignDepartment}
+                    onChange={e => setAssignDepartment(e.target.value)}
+                  >
+                    <option value="">All Departments</option>
+                    {['Cardiology', 'Neurology', 'Orthopedics', 'Pediatrics', 'General', 'Emergency', 'Surgery', 'Oncology'].map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
+
                 <div className="form-group">
-                  <label className="form-label">Assigned Attending Doctor Name *</label>
-                  <input className="form-control" placeholder="Dr. Sarah Jenkins" value={assignForm.doctorName} onChange={e => setAssignForm({ ...assignForm, doctorName: e.target.value })} required />
+                  <label className="form-label">Assigned Attending Doctor * ({eligibleDoctors.length} available)</label>
+                  <select
+                    className="form-control"
+                    value={assignForm.doctorId}
+                    onChange={e => {
+                      const docId = e.target.value;
+                      const doc = eligibleDoctors.find(d => d.id === docId);
+                      setAssignForm(f => ({
+                        ...f,
+                        doctorId: docId,
+                        doctorName: doc ? `Dr. ${doc.firstName} ${doc.lastName}` : f.doctorName,
+                      }));
+                    }}
+                    required
+                  >
+                    <option value="">Select Doctor</option>
+                    {eligibleDoctors.map(d => (
+                      <option key={d.id} value={d.id}>
+                        Dr. {d.firstName} {d.lastName} ({d.department})
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 

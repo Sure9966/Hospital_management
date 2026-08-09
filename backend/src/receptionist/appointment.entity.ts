@@ -25,6 +25,9 @@ export class Appointment {
   @Column()
   patientName: string;
 
+  @Column({ nullable: true })
+  doctorId: string;
+
   @Column()
   doctorName: string;
 

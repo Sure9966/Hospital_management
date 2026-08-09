@@ -3,21 +3,30 @@ import { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
+import { useSearchParams } from 'next/navigation';
 
 export default function ManagementDashboard() {
+  const searchParams = useSearchParams();
   const [stats, setStats] = useState<any>({});
   const [staff, setStaff] = useState<any[]>([]);
   const [patients, setPatients] = useState<any[]>([]);
   const [broadcastForm, setBroadcastForm] = useState({ title: '', message: '', targetRole: '' });
   const [loading, setLoading] = useState(false);
-  const [tab, setTab] = useState<'overview'|'staff'|'patients'|'broadcast'>('overview');
+  const [tab, setTab] = useState<'overview' | 'staff' | 'patients' | 'broadcast'>('overview');
 
   useEffect(() => {
     api.get('/management/dashboard').then(r => setStats(r.data));
     api.get('/users').then(r => setStaff(r.data));
     api.get('/patients').then(r => setPatients(r.data));
   }, []);
-
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam === 'staff' || tabParam === 'patients' || tabParam === 'broadcast') {
+      setTab(tabParam);
+    } else {
+      setTab('overview');
+    }
+  }, [searchParams]);
   const handleBroadcast = async (e: React.FormEvent) => {
     e.preventDefault(); setLoading(true);
     try {
@@ -43,7 +52,7 @@ export default function ManagementDashboard() {
       <div className="topbar">
         <div className="topbar-title">Hospital Management</div>
         <div className="flex gap-2">
-          {(['overview','staff','patients','broadcast'] as const).map(t => (
+          {(['overview', 'staff', 'patients', 'broadcast'] as const).map(t => (
             <button key={t} className={`btn btn-sm ${tab === t ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab(t)} style={{ textTransform: 'capitalize' }}>
               {t === 'overview' ? '📊' : t === 'staff' ? '👥' : t === 'patients' ? '🏥' : '📢'} {t}
             </button>
@@ -89,7 +98,7 @@ export default function ManagementDashboard() {
               <div className="card">
                 <div className="card-header"><span className="card-title">🏥 Patient Status</span></div>
                 <div className="card-body">
-                  {['registered','admitted','under_treatment','discharged'].map(status => {
+                  {['registered', 'admitted', 'under_treatment', 'discharged'].map(status => {
                     const count = patients.filter(p => p.status === status).length;
                     return (
                       <div key={status} className="flex items-center gap-3" style={{ padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
@@ -140,7 +149,7 @@ export default function ManagementDashboard() {
                       <td>{p.gender}</td>
                       <td>{p.bloodGroup || '—'}</td>
                       <td>{p.ward || '—'}</td>
-                      <td><span className={`badge ${statusColors[p.status] || 'badge-gray'}`}>{p.status?.replace('_',' ')}</span></td>
+                      <td><span className={`badge ${statusColors[p.status] || 'badge-gray'}`}>{p.status?.replace('_', ' ')}</span></td>
                     </tr>
                   ))}
                 </tbody>

@@ -6,7 +6,7 @@ import { Patient } from '../patients/patient.entity';
 import { Vital } from '../nurse/vital.entity';
 import { Prescription } from '../pharmacy/prescription.entity';
 import { NotificationsService } from '../notifications/notifications.service';
-
+import { Appointment } from '../receptionist/appointment.entity';
 @Injectable()
 export class DoctorService {
   constructor(
@@ -19,8 +19,9 @@ export class DoctorService {
     @InjectRepository(Prescription)
     private prescriptionRepo: Repository<Prescription>,
     private notificationsService: NotificationsService,
-  ) {}
-
+    @InjectRepository(Appointment)
+    private appointmentRepo: Repository<Appointment>,
+  ) { }
   async createConsultation(data: Partial<DoctorConsultation>, doctorUser?: any) {
     const consultation = this.consultationRepo.create({
       ...data,
@@ -141,7 +142,7 @@ export class DoctorService {
     };
   }
 
-  async assignDoctorToPatient(patientId: string, doctorName: string) {
+  async assignDoctorToPatient(patientId: string, doctorName: string, doctorId?: string) {
     let patient = await this.patientRepo.findOne({ where: { patientId } });
     if (!patient) {
       patient = await this.patientRepo.findOne({ where: { id: patientId } });
@@ -151,16 +152,43 @@ export class DoctorService {
     }
 
     patient.admittedBy = doctorName;
+    patient.assignedDoctorName = doctorName;
+    if (doctorId) {
+      patient.assignedDoctorId = doctorId;
+    }
+
     await this.patientRepo.save(patient);
+
+    if (doctorId) {
+      await this.notificationsService.sendToUser(
+        'New Patient Assigned',
+        `Patient ${patient.firstName} ${patient.lastName} (${patient.patientId}) has been assigned to you.`,
+        doctorId,
+        'doctor_assignment',
+        patient.id,
+      );
+    }
 
     await this.notificationsService.sendToRole(
       'Hospital Attending Doctor Assigned',
-      `Attending Doctor Dr. ${doctorName} assigned to patient ${patient.firstName} ${patient.lastName} (${patient.patientId}).`,
+      `Attending Doctor ${doctorName} assigned to patient ${patient.firstName} ${patient.lastName} (${patient.patientId}).`,
       'nurse',
       'doctor_assignment',
       patient.id,
     );
 
     return patient;
+  }
+
+  async getMyAppointments(doctorId: string) {
+    return this.appointmentRepo.find({
+      where: {
+        doctorId: doctorId,
+      },
+      order: {
+        appointmentDate: 'ASC',
+        appointmentTime: 'ASC',
+      },
+    });
   }
 }

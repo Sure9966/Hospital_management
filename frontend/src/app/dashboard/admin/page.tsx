@@ -43,12 +43,52 @@ const ROLE_META: Record<RoleKey, { label: string; badge: string; color: string; 
   patient: { label: 'Patient', badge: 'badge-gray', color: '#94a3b8', bg: 'rgba(148,163,184,0.15)', dashboard: '/dashboard/patient' },
 };
 
-const DEPARTMENTS = [
-  'Administration', 'Reception', 'Emergency & Triage', 'Pharmacy',
-  'Management', 'ICU', 'Cardiology', 'Neurology', 'Orthopedics',
-  'Pediatrics', 'Radiology', 'Laboratory', 'Surgery', 'Oncology',
-];
+// const DEPARTMENTS = [
+//   'Administration', 'Reception', 'Emergency & Triage', 'Pharmacy',
+//   'Management', 'ICU', 'Cardiology', 'Neurology', 'Orthopedics',
+//   'Pediatrics', 'Radiology', 'Laboratory', 'Surgery', 'Oncology',
+// ];
+const DEPARTMENTS: Record<RoleKey, string[]> = {
+  admin: [
+    'Administration',
+  ],
 
+  receptionist: [
+    'Reception',
+    'OPD',
+  ],
+
+  nurse: [
+    'Emergency & Triage',
+    'ICU',
+    'General Ward',
+    'Surgery',
+    'Pediatrics',
+  ],
+
+  doctor: [
+    'General',
+    'Cardiology',
+    'Neurology',
+    'Orthopedics',
+    'Pediatrics',
+    'Radiology',
+    'Surgery',
+    'Oncology',
+  ],
+
+  pharmacist: [
+    'Pharmacy',
+  ],
+
+  management: [
+    'Management',
+  ],
+
+  patient: [
+    'Patient',
+  ],
+};
 const BLANK_FORM = {
   firstName: '', lastName: '', email: '', password: '',
   role: 'receptionist' as RoleKey, department: '', phone: '',
@@ -56,16 +96,57 @@ const BLANK_FORM = {
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-function validate(form: typeof BLANK_FORM, isNew: boolean): FormErrors {
+// function validate(form: typeof BLANK_FORM, isNew: boolean): FormErrors {
+//   const errors: FormErrors = {};
+//   if (!form.firstName.trim()) errors.firstName = 'First name is required';
+//   if (!form.lastName.trim()) errors.lastName = 'Last name is required';
+//   if (!form.email.trim()) errors.email = 'Email is required';
+//   else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
+//     errors.email = 'Enter a valid email address';
+//   if (isNew && !form.password) errors.password = 'Password is required for new accounts';
+//   if (form.phone && !/^\+?[\d\s\-()]{7,15}$/.test(form.phone))
+//     errors.phone = 'Enter a valid phone number';
+//   return errors;
+// }
+function validate(
+  form: typeof BLANK_FORM,
+  isNew: boolean,
+): FormErrors {
+
   const errors: FormErrors = {};
-  if (!form.firstName.trim()) errors.firstName = 'First name is required';
-  if (!form.lastName.trim()) errors.lastName = 'Last name is required';
-  if (!form.email.trim()) errors.email = 'Email is required';
-  else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
+
+  if (!form.firstName.trim()) {
+    errors.firstName = 'First name is required';
+  }
+
+  if (!form.lastName.trim()) {
+    errors.lastName = 'Last name is required';
+  }
+
+  if (!form.email.trim()) {
+    errors.email = 'Email is required';
+  } else if (
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)
+  ) {
     errors.email = 'Enter a valid email address';
-  if (isNew && !form.password) errors.password = 'Password is required for new accounts';
-  if (form.phone && !/^\+?[\d\s\-()]{7,15}$/.test(form.phone))
+  }
+
+  if (isNew && !form.password.trim()) {
+    errors.password = 'Password is required';
+  }
+
+  if (!form.phone.trim()) {
+    errors.phone = 'Phone number is required';
+  } else if (
+    !/^\+?[\d\s\-()]{7,15}$/.test(form.phone)
+  ) {
     errors.phone = 'Enter a valid phone number';
+  }
+
+  if (!form.department) {
+    errors.department = 'Department is required';
+  }
+
   return errors;
 }
 import type { ReactNode } from 'react';
@@ -643,7 +724,18 @@ export default function AdminDashboardPage() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <F label="Assigned Role *">
                   <select className="form-control" value={form.role}
-                    onChange={e => setForm({ ...form, role: e.target.value as RoleKey })}>
+                    // onChange={e => setForm({ ...form, role: e.target.value as RoleKey })}>
+                    onChange={e => {
+                      const newRole = e.target.value as RoleKey;
+                      setForm({
+                        ...form,
+                        role: newRole,
+                        department:
+                          DEPARTMENTS[newRole].length === 1
+                            ? DEPARTMENTS[newRole][0]
+                            : '',
+                      });
+                    }} >
                     {(Object.keys(ROLE_META) as RoleKey[]).map(r => (
                       <option key={r} value={r}>{ROLE_META[r].label}</option>
                     ))}
@@ -652,17 +744,26 @@ export default function AdminDashboardPage() {
                     → Redirects to {ROLE_META[form.role].dashboard}
                   </span>
                 </F>
-                <F label="Department" error={formErrors.department}>
+                {/* <F label="Department" error={formErrors.department}>
                   <select className="form-control" value={form.department}
                     onChange={e => setForm({ ...form, department: e.target.value })}>
                     <option value="">— Select Department —</option>
                     {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
                     <option value="other">Other / Custom</option>
                   </select>
+                </F> */}
+                <F label="Department *" error={formErrors.department}>
+                  <select className="form-control" value={form.department} required
+                    onChange={e => setForm({ ...form, department: e.target.value })}>
+                    <option value="">— Select Department —</option>
+                    {DEPARTMENTS[form.role].map(department => (
+                      <option key={department} value={department}>{department}</option>
+                    ))}
+                  </select>
                 </F>
               </div>
 
-              <F label="Phone Number" error={formErrors.phone}>
+              <F label="Phone Number *" error={formErrors.phone}>
                 <input type="tel" className="form-control" placeholder="+1 (555) 000-0000"
                   value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}
                   style={{ borderColor: formErrors.phone ? 'var(--danger)' : undefined, background: 'var(--bg-surface)', color: 'var(--text-primary)' }} />
@@ -754,11 +855,28 @@ export default function AdminDashboardPage() {
                     </select>
                     <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>→ {ROLE_META[editUser.role].dashboard}</span>
                   </F>
-                  <F label="Department">
+                  {/* <F label="Department">
                     <select className="form-control" value={editUser.department || ''}
                       onChange={e => setEditUser({ ...editUser, department: e.target.value })}>
                       <option value="">— Select —</option>
                       {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </F> */}
+                  <F label="Department *" error={formErrors.department} >
+                    <select className="form-control" value={editUser.department} required
+                      onChange={e => setEditUser({ ...editUser, department: e.target.value, })}
+                    >
+                      <option value="">— Select Department —</option>
+                      {DEPARTMENTS[editUser.role].map(
+                        department => (
+                          <option
+                            key={department}
+                            value={department}
+                          >
+                            {department}
+                          </option>
+                        ),
+                      )}
                     </select>
                   </F>
                 </div>

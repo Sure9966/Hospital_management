@@ -44,7 +44,11 @@ interface Admission {
   createdAt: string;
 }
 
-export default function BedManagementPage() {
+export default function BedManagementPage({
+  role = 'admin',
+}: {
+  role?: string;
+}) {
   const [wards, setWards] = useState<Ward[]>([]);
   const [beds, setBeds] = useState<Bed[]>([]);
   const [admissions, setAdmissions] = useState<Admission[]>([]);
@@ -257,7 +261,7 @@ export default function BedManagementPage() {
   }
 
   return (
-    <DashboardLayout role="admin" title="Hospital Bed & Ward Management">
+    <DashboardLayout role={role} title="Hospital Bed & Ward Management">
       {/* Page Header */}
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <div>
@@ -421,19 +425,18 @@ export default function BedManagementPage() {
                     background: isOccupied
                       ? 'rgba(239,68,68,0.06)'
                       : isVacant
-                      ? 'rgba(16,185,129,0.06)'
-                      : isCleaning
-                      ? 'rgba(245,158,11,0.06)'
-                      : 'var(--bg-surface)',
-                    border: `1.5px solid ${
-                      isOccupied
+                        ? 'rgba(16,185,129,0.06)'
+                        : isCleaning
+                          ? 'rgba(245,158,11,0.06)'
+                          : 'var(--bg-surface)',
+                    border: `1.5px solid ${isOccupied
                         ? '#ef4444'
                         : isVacant
-                        ? '#10b981'
-                        : isCleaning
-                        ? '#f59e0b'
-                        : 'var(--border)'
-                    }`,
+                          ? '#10b981'
+                          : isCleaning
+                            ? '#f59e0b'
+                            : 'var(--border)'
+                      }`,
                     display: 'flex',
                     flexDirection: 'column',
                     justifyContent: 'space-between',

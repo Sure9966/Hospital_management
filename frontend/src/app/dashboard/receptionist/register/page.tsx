@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
 import api from '@/lib/api';
@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
 const GENDERS = ['male', 'female', 'other'];
+const DEPARTMENTS = ['Cardiology', 'Neurology', 'Orthopedics', 'Pediatrics', 'General', 'Emergency', 'Surgery', 'Oncology'];
 
 const emptyForm = {
   firstName: '', lastName: '', dateOfBirth: '', gender: '',
@@ -14,6 +15,7 @@ const emptyForm = {
   emergencyContact: '', emergencyPhone: '',
   insuranceNumber: '', insuranceProvider: '',
   diagnosis: '', ward: '', bedNumber: '', admittedBy: '', assignedNurse: '',
+  assignedDoctorId: '', assignedDoctorName: '', department: '',
   status: 'registered', notes: '',
 };
 
@@ -22,6 +24,15 @@ export default function RegisterPatient() {
   const [form, setForm] = useState({ ...emptyForm });
   const [loading, setLoading] = useState(false);
   const [createdPatient, setCreatedPatient] = useState<any>(null);
+  const [department, setDepartment] = useState('');
+  const [eligibleDoctors, setEligibleDoctors] = useState<any[]>([]);
+
+  useEffect(() => {
+    const url = department ? `/users/doctors?department=${encodeURIComponent(department)}` : '/users/doctors';
+    api.get(url)
+      .then(res => setEligibleDoctors(res.data || []))
+      .catch(() => setEligibleDoctors([]));
+  }, [department]);
 
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -183,7 +194,7 @@ export default function RegisterPatient() {
 
             {/* Admission */}
             <div className="card" style={{ marginBottom: 20 }}>
-              <div className="card-header"><span className="card-title">🛏️ Admission Details</span></div>
+              <div className="card-header"><span className="card-title">🛏️ Hospital Department & Attending Doctor Assignment</span></div>
               <div className="card-body">
                 <div className="form-grid form-grid-3">
                   <div className="form-group">
@@ -195,6 +206,44 @@ export default function RegisterPatient() {
                     </select>
                   </div>
                   <div className="form-group">
+                    <label className="form-label">Hospital Department</label>
+                    <select
+                      className="form-control"
+                      value={department}
+                      onChange={e => {
+                        setDepartment(e.target.value);
+                        set('department', e.target.value);
+                      }}
+                    >
+                      <option value="">Select Department</option>
+                      {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Assigned Doctor ({eligibleDoctors.length} available)</label>
+                    <select
+                      className="form-control"
+                      value={form.assignedDoctorId}
+                      onChange={e => {
+                        const docId = e.target.value;
+                        const doc = eligibleDoctors.find(d => d.id === docId);
+                        setForm(f => ({
+                          ...f,
+                          assignedDoctorId: docId,
+                          assignedDoctorName: doc ? `Dr. ${doc.firstName} ${doc.lastName}` : '',
+                          admittedBy: doc ? `Dr. ${doc.firstName} ${doc.lastName}` : f.admittedBy,
+                        }));
+                      }}
+                    >
+                      <option value="">Select Eligible Doctor</option>
+                      {eligibleDoctors.map(d => (
+                        <option key={d.id} value={d.id}>
+                          Dr. {d.firstName} {d.lastName} ({d.department})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group">
                     <label className="form-label">Ward</label>
                     <input className="form-control" placeholder="General Ward" value={form.ward} onChange={e => set('ward', e.target.value)} />
                   </div>
@@ -203,14 +252,10 @@ export default function RegisterPatient() {
                     <input className="form-control" placeholder="B-101" value={form.bedNumber} onChange={e => set('bedNumber', e.target.value)} />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Admitted by Doctor</label>
-                    <input className="form-control" placeholder="Dr. Smith" value={form.admittedBy} onChange={e => set('admittedBy', e.target.value)} />
-                  </div>
-                  <div className="form-group">
                     <label className="form-label">Assigned Nurse</label>
                     <input className="form-control" placeholder="Nurse Johnson" value={form.assignedNurse} onChange={e => set('assignedNurse', e.target.value)} />
                   </div>
-                  <div className="form-group">
+                  <div className="form-group" style={{ gridColumn: 'span 3' }}>
                     <label className="form-label">Diagnosis</label>
                     <input className="form-control" placeholder="Initial diagnosis" value={form.diagnosis} onChange={e => set('diagnosis', e.target.value)} />
                   </div>

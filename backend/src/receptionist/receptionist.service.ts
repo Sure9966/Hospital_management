@@ -19,9 +19,45 @@ export class ReceptionistService {
     const appointment = this.appointmentRepo.create(data);
     const saved = await this.appointmentRepo.save(appointment);
 
+    // Sync patient assigned doctor if patientId is present
+    if (saved.patientId) {
+      let patient = await this.patientRepo.findOne({ where: { patientId: saved.patientId } });
+      if (!patient) {
+        patient = await this.patientRepo.findOne({ where: { id: saved.patientId } });
+      }
+      if (patient) {
+        if (saved.doctorId) patient.assignedDoctorId = saved.doctorId;
+        if (saved.doctorName) patient.assignedDoctorName = saved.doctorName;
+        if (saved.department) patient.department = saved.department;
+        await this.patientRepo.save(patient);
+      }
+    }
+
+    // Send notification to the specific doctor if doctorId is provided
+    if (saved.doctorId) {
+      await this.notificationsService.sendToUser(
+        'New Patient Appointment Assigned',
+        `You have a new patient appointment: ${saved.patientName} (${saved.patientId || 'N/A'}) scheduled for ${saved.appointmentDate} at ${saved.appointmentTime}.`,
+        saved.doctorId,
+        'appointment',
+        saved.id,
+        createdById,
+      );
+    } else {
+      // Fallback: Notify all doctors
+      await this.notificationsService.sendToRole(
+        'New Appointment Scheduled',
+        `Appointment for ${saved.patientName} with ${saved.doctorName} on ${saved.appointmentDate} at ${saved.appointmentTime}.`,
+        'doctor',
+        'appointment',
+        saved.id,
+        createdById,
+      );
+    }
+
     await this.notificationsService.sendToRole(
       'New Appointment Scheduled',
-      `Appointment for ${saved.patientName} with Dr. ${saved.doctorName} on ${saved.appointmentDate} at ${saved.appointmentTime}.`,
+      `Appointment for ${saved.patientName} with ${saved.doctorName} on ${saved.appointmentDate} at ${saved.appointmentTime}.`,
       'nurse',
       'appointment',
       saved.id,
@@ -41,7 +77,22 @@ export class ReceptionistService {
 
   async updateAppointment(id: string, data: Partial<Appointment>) {
     await this.appointmentRepo.update(id, data);
-    return this.findAppointmentById(id);
+    const updated = await this.findAppointmentById(id);
+
+    if (updated && updated.patientId && (data.doctorId || data.doctorName)) {
+      let patient = await this.patientRepo.findOne({ where: { patientId: updated.patientId } });
+      if (!patient) {
+        patient = await this.patientRepo.findOne({ where: { id: updated.patientId } });
+      }
+      if (patient) {
+        if (updated.doctorId) patient.assignedDoctorId = updated.doctorId;
+        if (updated.doctorName) patient.assignedDoctorName = updated.doctorName;
+        if (updated.department) patient.department = updated.department;
+        await this.patientRepo.save(patient);
+      }
+    }
+
+    return updated;
   }
 
   async deleteAppointment(id: string) {

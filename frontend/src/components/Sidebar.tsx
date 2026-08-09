@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { clearAuth, getUser } from '@/lib/auth';
 import { useSocket } from '@/lib/useSocket';
@@ -11,19 +11,21 @@ const roleMenus: Record<string, { icon: string; label: string; href: string }[]>
     { icon: '📊', label: 'Dashboard', href: '/dashboard/admin' },
     { icon: '👥', label: 'Users', href: '/dashboard/admin/users' },
     { icon: '🏥', label: 'Patients', href: '/dashboard/admin/patients' },
+
   ],
   receptionist: [
     { icon: '📊', label: 'OPD & Dashboard', href: '/dashboard/receptionist' },
     { icon: '🏥', label: 'Register Patient', href: '/dashboard/receptionist/register' },
     { icon: '📅', label: 'Appointments', href: '/dashboard/receptionist/appointments' },
     { icon: '🎟️', label: 'OPD Queue Tokens', href: '/dashboard/receptionist/opd-queue' },
-    { icon: '🛏️', label: 'Bed Management', href: '/dashboard/receptionist/beds' },
-    { icon: '💳', label: 'Billing & Payments', href: '/dashboard/receptionist/beds?tab=billing' },
+    // { icon: '🛏️', label: 'Bed Management', href: '/dashboard/receptionist/beds' },
+    // { icon: '💳', label: 'Billing & Payments', href: '/dashboard/receptionist/beds?tab=billing' },
   ],
   nurse: [
     { icon: '📊', label: 'Dashboard', href: '/dashboard/nurse' },
     { icon: '💗', label: 'Record Vitals', href: '/dashboard/nurse/vitals' },
-    { icon: '🛏️', label: 'Bed Management', href: '/dashboard/admin/beds' },
+    // { icon: '🛏️', label: 'Bed Management', href: '/dashboard/admin/beds' },
+    { icon: '🛏️', label: 'Bed Management', href: '/dashboard/nurse/beds' },
     { icon: '🏥', label: 'My Patients', href: '/dashboard/nurse/patients' },
   ],
   doctor: [
@@ -38,9 +40,13 @@ const roleMenus: Record<string, { icon: string; label: string; href: string }[]>
   ],
   management: [
     { icon: '📊', label: 'Dashboard', href: '/dashboard/management' },
-    { icon: '👥', label: 'All Staff', href: '/dashboard/management/staff' },
-    { icon: '🏥', label: 'All Patients', href: '/dashboard/management/patients' },
-    { icon: '📢', label: 'Broadcast', href: '/dashboard/management/broadcast' },
+    { icon: '👥', label: 'All Staff', href: '/dashboard/management?tab=staff' },
+    { icon: '🏥', label: 'All Patients', href: '/dashboard/management?tab=patients' },
+    { icon: '📢', label: 'Broadcast', href: '/dashboard/management?tab=broadcast' },
+    // { icon: '🛏️', label: 'Bed Management', href: '/dashboard/admin/beds' },
+    { icon: '🛏️', label: 'Bed Management', href: '/dashboard/management/beds' },
+
+
   ],
   patient: [
     { icon: '📊', label: 'My Records', href: '/dashboard/patient' },
@@ -49,6 +55,8 @@ const roleMenus: Record<string, { icon: string; label: string; href: string }[]>
 };
 
 export default function Sidebar({ role }: { role: string }) {
+  const searchParams = useSearchParams();
+  const currentTab = searchParams.get('tab');
   const pathname = usePathname();
   const router = useRouter();
   const { notifications, unreadCount, markRead } = useSocket();
@@ -81,7 +89,8 @@ export default function Sidebar({ role }: { role: string }) {
             <Link
               key={item.href}
               href={item.href}
-              className={`nav-item ${pathname === item.href ? 'active' : ''}`}
+              // className={`nav-item ${pathname === item.href ? 'active' : ''}`}
+              className={`nav-item ${item.href.includes('?tab=') ? pathname === item.href.split('?')[0] && currentTab === item.href.split('tab=')[1] ? 'active' : '' : pathname === item.href && !currentTab ? 'active' : ''}`}
             >
               <span className="nav-icon">{item.icon}</span>
               {item.label}

@@ -8,7 +8,7 @@ const DEPARTMENTS = ['Cardiology', 'Neurology', 'Orthopedics', 'Pediatrics', 'Ge
 const TIMES = ['08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '12:00', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00'];
 
 const emptyForm = {
-  patientId: '', patientName: '', doctorName: '', department: '',
+  patientId: '', patientName: '', doctorId: '', doctorName: '', department: '',
   appointmentDate: '', appointmentTime: '', reason: '', notes: '',
 };
 
@@ -19,9 +19,17 @@ export default function AppointmentsPage() {
   const [loading, setLoading] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [eligibleDoctors, setEligibleDoctors] = useState<any[]>([]);
 
   const load = () => api.get('/receptionist/appointments').then(r => setAppointments(r.data));
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    const url = form.department ? `/users/doctors?department=${encodeURIComponent(form.department)}` : '/users/doctors';
+    api.get(url)
+      .then(res => setEligibleDoctors(res.data || []))
+      .catch(() => setEligibleDoctors([]));
+  }, [form.department]);
 
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
 
@@ -41,7 +49,7 @@ export default function AppointmentsPage() {
   };
 
   const handleEdit = (a: any) => {
-    setForm({ patientId: a.patientId, patientName: a.patientName, doctorName: a.doctorName, department: a.department, appointmentDate: a.appointmentDate, appointmentTime: a.appointmentTime, reason: a.reason || '', notes: a.notes || '' });
+    setForm({ patientId: a.patientId, patientName: a.patientName, doctorId: a.doctorId || '', doctorName: a.doctorName, department: a.department, appointmentDate: a.appointmentDate, appointmentTime: a.appointmentTime, reason: a.reason || '', notes: a.notes || '' });
     setEditId(a.id); setShowModal(true);
   };
 
@@ -127,14 +135,42 @@ export default function AppointmentsPage() {
                     <input className="form-control" placeholder="PAT-2024-0001" value={form.patientId} onChange={e => set('patientId', e.target.value)} />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Doctor Name *</label>
-                    <input className="form-control" placeholder="Dr. Smith" value={form.doctorName} onChange={e => set('doctorName', e.target.value)} required />
-                  </div>
-                  <div className="form-group">
                     <label className="form-label">Department *</label>
-                    <select className="form-control" value={form.department} onChange={e => set('department', e.target.value)} required>
+                    <select
+                      className="form-control"
+                      value={form.department}
+                      onChange={e => {
+                        set('department', e.target.value);
+                        setForm(f => ({ ...f, doctorId: '', doctorName: '' }));
+                      }}
+                      required
+                    >
                       <option value="">Select Department</option>
                       {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Doctor Name * ({eligibleDoctors.length} eligible)</label>
+                    <select
+                      className="form-control"
+                      value={form.doctorId}
+                      onChange={e => {
+                        const docId = e.target.value;
+                        const doc = eligibleDoctors.find(d => d.id === docId);
+                        setForm(f => ({
+                          ...f,
+                          doctorId: docId,
+                          doctorName: doc ? `${doc.firstName} ${doc.lastName}` : (docId ? f.doctorName : ''),
+                        }));
+                      }}
+                      required
+                    >
+                      <option value="">Select Doctor</option>
+                      {eligibleDoctors.map(d => (
+                        <option key={d.id} value={d.id}>
+                          Dr. {d.firstName} {d.lastName} ({d.department})
+                        </option>
+                      ))}
                     </select>
                   </div>
                   <div className="form-group">
