@@ -267,7 +267,7 @@ export default function DoctorDashboard() {
 
       <div className="page-content">
         {/* Navigation Responsive Tabs */}
-        <div style={{ display: 'flex', gap: 8, overflowX: 'auto', marginBottom: 20, paddingBottom: 4 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20, paddingBottom: 4 }}>
           {[
             { id: 'queue', label: '📅 Today OPD Queue', icon: '🎟️' },
             { id: 'patients', label: '🏥 Patient Records & Files', icon: '📂' },

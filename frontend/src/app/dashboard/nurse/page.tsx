@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
+import { useSearchParams } from 'next/navigation';
 
 const emptyForm = {
   patientId: '', patientName: '', temperature: '', bloodPressure: '',
@@ -11,6 +12,21 @@ const emptyForm = {
 };
 
 export default function NurseDashboard() {
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+
+    if (
+      tab === 'vitals' ||
+      tab === 'triage' ||
+      tab === 'history' ||
+      tab === 'reports'
+    ) {
+      setActiveTab(tab);
+    } else {
+      setActiveTab('vitals');
+    }
+  }, [searchParams]);
   const [vitals, setVitals] = useState<any[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
@@ -74,7 +90,7 @@ export default function NurseDashboard() {
     return `badge ${m[p] || 'badge-gray'}`;
   };
 
-  const filteredVitals = vitals.filter(v => 
+  const filteredVitals = vitals.filter(v =>
     v.patientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
     v.patientId.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (v.triagePriority && v.triagePriority.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -347,11 +363,11 @@ export default function NurseDashboard() {
                   ))}
                 </div>
 
-                <div className="form-group" style={{ marginTop: 16 }}>
+                {/* <div className="form-group" style={{ marginTop: 16 }}>
                   <label className="form-label">Pain Scale (0-10): {form.pain}</label>
                   <input type="range" min={0} max={10} value={form.pain} onChange={e => set('pain', e.target.value)} style={{ width: '100%', accentColor: 'var(--primary)' }} />
                   <div className="flex justify-between text-xs text-muted"><span>No Pain (0)</span><span>Moderate (5)</span><span>Severe Pain (10)</span></div>
-                </div>
+                </div> */}
 
                 <div className="form-group" style={{ marginTop: 14 }}>
                   <label className="form-label">Triage & Clinical Observations Note</label>

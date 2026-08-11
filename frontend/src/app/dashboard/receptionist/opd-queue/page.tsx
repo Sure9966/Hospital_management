@@ -19,7 +19,7 @@ export default function OpdQueuePage() {
     appointmentDate: new Date().toISOString().split('T')[0], appointmentTime: '09:00', reason: 'OPD Walk-in Consult'
   });
   const [eligibleDoctors, setEligibleDoctors] = useState<any[]>([]);
-
+  const [doctors, setDoctors] = useState<any[]>([]);
   const loadData = () => {
     setLoading(true);
     api.get('/receptionist/opd-queue')
@@ -28,7 +28,17 @@ export default function OpdQueuePage() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { loadData(); }, []);
+  // useEffect(() => { loadData(); }, []);
+  useEffect(() => {
+    loadData();
+
+    api.get('/users/doctors')
+      .then(res => setDoctors(res.data || []))
+      .catch(() => {
+        setDoctors([]);
+        toast.error('Failed to load doctors');
+      });
+  }, []);
 
   useEffect(() => {
     const url = quickForm.department ? `/users/doctors?department=${encodeURIComponent(quickForm.department)}` : '/users/doctors';
@@ -90,19 +100,50 @@ export default function OpdQueuePage() {
   });
 
   // Doctor Appointment Overview Cards grouping
-  const doctorOverview = (opdData.appointments || []).reduce((acc: any, a: any) => {
-    const doc = a.doctorName || 'Unassigned';
-    if (!acc[doc]) {
-      acc[doc] = { doctorName: doc, department: a.department, total: 0, waiting: 0, inProgress: 0, completed: 0 };
-    }
-    acc[doc].total += 1;
-    if (a.status === 'scheduled' || a.status === 'confirmed') acc[doc].waiting += 1;
-    if (a.status === 'in_progress') acc[doc].inProgress += 1;
-    if (a.status === 'completed') acc[doc].completed += 1;
-    return acc;
-  }, {});
+  // const doctorOverview = (opdData.appointments || []).reduce((acc: any, a: any) => {
+  //   const doc = a.doctorName || 'Unassigned';
+  //   if (!acc[doc]) {
+  //     acc[doc] = { doctorName: doc, department: a.department, total: 0, waiting: 0, inProgress: 0, completed: 0 };
+  //   }
+  //   acc[doc].total += 1;
+  //   if (a.status === 'scheduled' || a.status === 'confirmed') acc[doc].waiting += 1;
+  //   if (a.status === 'in_progress') acc[doc].inProgress += 1;
+  //   if (a.status === 'completed') acc[doc].completed += 1;
+  //   return acc;
+  // }, {});
 
-  const doctorsList = Object.values(doctorOverview);
+  // const doctorsList = Object.values(doctorOverview);
+  const doctorsList = doctors.map((doctor: any) => {
+    const doctorName = `${doctor.firstName} ${doctor.lastName}`;
+
+    const doctorAppointments = (opdData.appointments || []).filter(
+      (a: any) =>
+        a.doctorId === doctor.id ||
+        a.doctorName === doctorName
+    );
+
+    return {
+      id: doctor.id,
+      doctorName,
+      department: doctor.department || 'General',
+
+      total: doctorAppointments.length,
+
+      waiting: doctorAppointments.filter(
+        (a: any) =>
+          a.status === 'scheduled' ||
+          a.status === 'confirmed'
+      ).length,
+
+      inProgress: doctorAppointments.filter(
+        (a: any) => a.status === 'in_progress'
+      ).length,
+
+      completed: doctorAppointments.filter(
+        (a: any) => a.status === 'completed'
+      ).length,
+    };
+  });
 
   return (
     <DashboardLayout role="receptionist">
