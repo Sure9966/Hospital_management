@@ -26,6 +26,22 @@ export default function DoctorDashboard() {
   const [consultations, setConsultations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const [showDischargeModal, setShowDischargeModal] = useState(false);
+  const [savingDischarge, setSavingDischarge] = useState(false);
+
+  const [dischargeForm, setDischargeForm] = useState({
+    patientId: '',
+    patientName: '',
+    diagnosis: '',
+    dischargeDate: new Date().toISOString().split('T')[0],
+    conditionAtDischarge: 'Stable',
+    dischargeSummary: '',
+    medications: '',
+    followUpDate: '',
+    followUpInstructions: '',
+    dietInstructions: '',
+    activityInstructions: '',
+  });
   const [activeTab, setActiveTab] = useState<'queue' | 'patients' | 'consultation' | 'vitals' | 'tests' | 'prescriptions' | 'bedrequests'>('queue');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -120,6 +136,51 @@ export default function DoctorDashboard() {
     }
   }, [searchParams]);
 
+
+  const openDischargeModal = (patient: any) => {
+    setDischargeForm({
+      patientId: patient.patientId,
+      patientName: `${patient.firstName} ${patient.lastName}`,
+      diagnosis: patient.diagnosis || '',
+      dischargeDate: new Date().toISOString().split('T')[0],
+      conditionAtDischarge: 'Stable',
+      dischargeSummary: '',
+      medications: '',
+      followUpDate: '',
+      followUpInstructions: '',
+      dietInstructions: '',
+      activityInstructions: '',
+    });
+
+    setShowDischargeModal(true);
+  };
+
+  const handleDischargeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingDischarge(true);
+
+    try {
+      await api.post(
+        `/doctor/patient/${dischargeForm.patientId}/discharge`,
+        dischargeForm
+      );
+
+      toast.success(
+        '✅ Patient discharged successfully. Nurse notified.'
+      );
+
+      setShowDischargeModal(false);
+      loadData();
+
+    } catch (err: any) {
+      toast.error(
+        err.response?.data?.message ||
+        'Failed to discharge patient'
+      );
+    } finally {
+      setSavingDischarge(false);
+    }
+  };
   const handleOpenEhr = async (patientIdentifier: string) => {
     setLoadingEhr(true);
     setShowEhrModal(true);
@@ -423,10 +484,38 @@ export default function DoctorDashboard() {
                           </div>
                         </td>
                         <td>{p.diagnosis || 'Pending Diagnosis'}</td>
-                        <td>
+                        {/* <td>
                           <button className="btn btn-primary btn-sm" onClick={() => handleOpenEhr(p.patientId)}>
                             📂 Open Patient EHR
                           </button>
+                        </td> */}
+
+                        <td>
+                          <div
+                            style={{
+                              display: 'flex',
+                              gap: 6,
+                              flexWrap: 'wrap',
+                            }}
+                          >
+                            <button
+                              className="btn btn-primary btn-sm"
+                              onClick={() => handleOpenEhr(p.patientId)}
+                            >
+                              📂 Open EHR
+                            </button>
+
+                            {p.status !== 'discharged' && (
+                              <button type="button" className="btn btn-sm" style={{ background: '#10b981', color: '#fff', border: 'none', }} onClick={() => openDischargeModal(p)}>
+                                ✅ Discharge
+                              </button>
+                            )}
+                            {p.status === 'discharged' && (
+                              <button type="button" className="btn btn-sm" style={{ background: '#c60938ff', color: '#fff', border: 'none', }} onClick={() => openDischargeModal(p)}>
+                                ✅ Discharged
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -973,6 +1062,323 @@ export default function DoctorDashboard() {
                   {savingBedRequest ? '⏳ Sending...' : '🛏️ Send Bed Request to Reception'}
                 </button>
               </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 6: Patient Discharge */}
+      {showDischargeModal && (
+        <div
+          className="modal-overlay"
+          onClick={e =>
+            e.target === e.currentTarget &&
+            setShowDischargeModal(false)
+          }
+        >
+          <div
+            className="modal"
+            style={{ maxWidth: 760 }}
+          >
+            <div className="modal-header">
+              <div>
+                <h3>🏥 Patient Discharge Summary</h3>
+
+                <p
+                  style={{
+                    fontSize: 12,
+                    color: 'var(--text-muted)',
+                    marginTop: 4,
+                  }}
+                >
+                  Complete the medical discharge summary.
+                  Nursing staff will be notified automatically.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="btn btn-secondary btn-icon"
+                onClick={() => setShowDischargeModal(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleDischargeSubmit}>
+
+              <div className="modal-body">
+
+                {/* Patient */}
+                <div
+                  className="form-grid form-grid-2"
+                  style={{ marginBottom: 14 }}
+                >
+                  <div className="form-group">
+                    <label className="form-label">
+                      Patient Name
+                    </label>
+
+                    <input
+                      className="form-control"
+                      value={dischargeForm.patientName}
+                      disabled
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">
+                      Patient ID
+                    </label>
+
+                    <input
+                      className="form-control"
+                      value={dischargeForm.patientId}
+                      disabled
+                    />
+                  </div>
+                </div>
+
+
+                {/* Date & Condition */}
+                <div
+                  className="form-grid form-grid-2"
+                  style={{ marginBottom: 14 }}
+                >
+                  <div className="form-group">
+                    <label className="form-label">
+                      Discharge Date *
+                    </label>
+
+                    <input
+                      type="date"
+                      className="form-control"
+                      value={dischargeForm.dischargeDate}
+                      onChange={e =>
+                        setDischargeForm(f => ({
+                          ...f,
+                          dischargeDate: e.target.value,
+                        }))
+                      }
+                      required
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">
+                      Condition at Discharge *
+                    </label>
+
+                    <select
+                      className="form-control"
+                      value={dischargeForm.conditionAtDischarge}
+                      onChange={e =>
+                        setDischargeForm(f => ({
+                          ...f,
+                          conditionAtDischarge: e.target.value,
+                        }))
+                      }
+                      required
+                    >
+                      <option value="Stable">Stable</option>
+                      <option value="Improved">Improved</option>
+                      <option value="Recovered">Recovered</option>
+                      <option value="Requires Follow-up">
+                        Requires Follow-up
+                      </option>
+                    </select>
+                  </div>
+                </div>
+
+
+                {/* Diagnosis */}
+                <div
+                  className="form-group"
+                  style={{ marginBottom: 14 }}
+                >
+                  <label className="form-label">
+                    Final Diagnosis *
+                  </label>
+
+                  <input
+                    className="form-control"
+                    value={dischargeForm.diagnosis}
+                    onChange={e =>
+                      setDischargeForm(f => ({
+                        ...f,
+                        diagnosis: e.target.value,
+                      }))
+                    }
+                    required
+                  />
+                </div>
+
+
+                {/* Summary */}
+                <div
+                  className="form-group"
+                  style={{ marginBottom: 14 }}
+                >
+                  <label className="form-label">
+                    Discharge Summary *
+                  </label>
+
+                  <textarea
+                    className="form-control"
+                    rows={4}
+                    placeholder="Treatment given, clinical progress and condition at discharge..."
+                    value={dischargeForm.dischargeSummary}
+                    onChange={e =>
+                      setDischargeForm(f => ({
+                        ...f,
+                        dischargeSummary: e.target.value,
+                      }))
+                    }
+                    required
+                  />
+                </div>
+
+
+                {/* Medication */}
+                <div
+                  className="form-group"
+                  style={{ marginBottom: 14 }}
+                >
+                  <label className="form-label">
+                    Medicines on Discharge
+                  </label>
+
+                  <textarea
+                    className="form-control"
+                    rows={2}
+                    placeholder="Paracetamol 500mg twice daily for 3 days..."
+                    value={dischargeForm.medications}
+                    onChange={e =>
+                      setDischargeForm(f => ({
+                        ...f,
+                        medications: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+
+
+                {/* Follow-up */}
+                <div
+                  className="form-grid form-grid-2"
+                  style={{ marginBottom: 14 }}
+                >
+                  <div className="form-group">
+                    <label className="form-label">
+                      Follow-up Date
+                    </label>
+
+                    <input
+                      type="date"
+                      className="form-control"
+                      value={dischargeForm.followUpDate}
+                      onChange={e =>
+                        setDischargeForm(f => ({
+                          ...f,
+                          followUpDate: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">
+                      Follow-up Instructions
+                    </label>
+
+                    <input
+                      className="form-control"
+                      placeholder="Review after 7 days"
+                      value={dischargeForm.followUpInstructions}
+                      onChange={e =>
+                        setDischargeForm(f => ({
+                          ...f,
+                          followUpInstructions: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+
+
+                {/* Diet + Activity */}
+                <div className="form-grid form-grid-2">
+
+                  <div className="form-group">
+                    <label className="form-label">
+                      Diet Instructions
+                    </label>
+
+                    <textarea
+                      className="form-control"
+                      rows={2}
+                      placeholder="Normal diet, increase fluids..."
+                      value={dischargeForm.dietInstructions}
+                      onChange={e =>
+                        setDischargeForm(f => ({
+                          ...f,
+                          dietInstructions: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">
+                      Activity Instructions
+                    </label>
+
+                    <textarea
+                      className="form-control"
+                      rows={2}
+                      placeholder="Avoid heavy activity for one week..."
+                      value={dischargeForm.activityInstructions}
+                      onChange={e =>
+                        setDischargeForm(f => ({
+                          ...f,
+                          activityInstructions: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+
+                </div>
+
+              </div>
+
+
+              <div className="modal-footer">
+
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowDischargeModal(false)}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  className="btn"
+                  disabled={savingDischarge}
+                  style={{
+                    background: '#10b981',
+                    color: '#fff',
+                    border: 'none',
+                  }}
+                >
+                  {savingDischarge
+                    ? '⏳ Discharging...'
+                    : '✅ Confirm Discharge & Notify Nurse'}
+                </button>
+
+              </div>
+
             </form>
           </div>
         </div>

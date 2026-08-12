@@ -42,4 +42,13 @@ export class DoctorController {
   getMyAppointments(@CurrentUser() user: any) {
     return this.doctorService.getMyAppointments(user.id);
   }
+
+  @Post('patient/:id/discharge')
+  dischargePatient(
+    @Param('id') id: string,
+    @Body() body: any,
+    @CurrentUser() user: any,
+  ) {
+    return this.doctorService.dischargePatient(id, body, user);
+  }
 }

@@ -1,15 +1,18 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { DoctorConsultation } from './doctor-consultation.entity';
+import { DoctorConsultation, ConsultationStatus } from './doctor-consultation.entity';
 import { Patient } from '../patients/patient.entity';
 import { Vital } from '../nurse/vital.entity';
 import { Prescription } from '../pharmacy/prescription.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { Appointment } from '../receptionist/appointment.entity';
+import { DischargeSummary } from './discharge-summary.entity';
 @Injectable()
 export class DoctorService {
   constructor(
+    @InjectRepository(DischargeSummary)
+    private dischargeRepo: Repository<DischargeSummary>,
     @InjectRepository(DoctorConsultation)
     private consultationRepo: Repository<DoctorConsultation>,
     @InjectRepository(Patient)
@@ -133,12 +136,22 @@ export class DoctorService {
       },
     ];
 
+    const dischargeSummaries =
+      await this.dischargeRepo.find({
+        where: {
+          patientId: patient.patientId,
+        },
+        order: {
+          createdAt: 'DESC',
+        },
+      });
     return {
       patient,
       vitals,
       prescriptions,
       consultations,
       labResults,
+      dischargeSummaries,
     };
   }
 
@@ -190,5 +203,109 @@ export class DoctorService {
         appointmentTime: 'ASC',
       },
     });
+  }
+
+
+  async dischargePatient(
+    patientIdentifier: string,
+    data: any,
+    doctorUser: any,
+  ) {
+    let patient = await this.patientRepo.findOne({
+      where: { patientId: patientIdentifier },
+    });
+
+    if (!patient) {
+      patient = await this.patientRepo.findOne({
+        where: { id: patientIdentifier },
+      });
+    }
+
+    if (!patient) {
+      throw new NotFoundException('Patient record not found');
+    }
+
+    if (patient.status === 'discharged' as any) {
+      // throw new Error('Patient is already discharged');
+      throw new BadRequestException('Patient is already discharged');
+    }
+
+    const doctorName =
+      doctorUser?.firstName && doctorUser?.lastName
+        ? `Dr. ${doctorUser.firstName} ${doctorUser.lastName}`
+        : patient.assignedDoctorName || patient.admittedBy || 'Doctor';
+
+    const discharge = this.dischargeRepo.create({
+      patientId: patient.patientId,
+      patientName: `${patient.firstName} ${patient.lastName}`,
+
+      doctorId: doctorUser?.id,
+      doctorName,
+
+      diagnosis: data.diagnosis || patient.diagnosis || '',
+
+      dischargeDate:
+        data.dischargeDate ||
+        new Date().toISOString().split('T')[0],
+
+      conditionAtDischarge:
+        data.conditionAtDischarge || 'Stable',
+
+      dischargeSummary: data.dischargeSummary,
+
+      medications: data.medications || '',
+
+      followUpDate: data.followUpDate || '',
+
+      followUpInstructions:
+        data.followUpInstructions || '',
+
+      dietInstructions:
+        data.dietInstructions || '',
+
+      activityInstructions:
+        data.activityInstructions || '',
+    });
+
+    const savedDischarge =
+      await this.dischargeRepo.save(discharge);
+
+    // Update patient
+    patient.status = 'discharged' as any;
+
+    patient.diagnosis =
+      data.diagnosis || patient.diagnosis;
+
+    await this.patientRepo.save(patient);
+
+    // Optional: update current consultations
+    await this.consultationRepo
+      .createQueryBuilder()
+      .update(DoctorConsultation)
+      .set({
+        status: ConsultationStatus.DISCHARGED,
+      })
+      .where('patientId = :patientId', {
+        patientId: patient.patientId,
+      })
+      .andWhere('status != :completed', {
+        completed: ConsultationStatus.COMPLETED,
+      })
+      .execute();
+
+    // Real-time Nurse notification
+    await this.notificationsService.sendToRole(
+      '🏥 Patient Discharged',
+      `${patient.firstName} ${patient.lastName} (${patient.patientId}) has been discharged by ${doctorName}. Please complete nursing discharge procedures.`,
+      'nurse',
+      'patient_discharge',
+      patient.id,
+    );
+
+    return {
+      message: 'Patient discharged successfully',
+      patient,
+      discharge: savedDischarge,
+    };
   }
 }

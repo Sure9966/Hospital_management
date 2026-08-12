@@ -8,10 +8,10 @@ import { Vital } from '../nurse/vital.entity';
 import { Prescription } from '../pharmacy/prescription.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { Appointment } from '../receptionist/appointment.entity';
-
+import { DischargeSummary } from './discharge-summary.entity';
 @Module({
   imports: [
-    TypeOrmModule.forFeature([DoctorConsultation, Patient, Vital, Prescription, Appointment]),
+    TypeOrmModule.forFeature([DoctorConsultation, Patient, Vital, Prescription, Appointment, DischargeSummary]),
     NotificationsModule,
   ],
   controllers: [DoctorController],
