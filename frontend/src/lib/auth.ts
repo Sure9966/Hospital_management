@@ -3,7 +3,7 @@ export interface User {
   email: string;
   firstName: string;
   lastName: string;
-  role: 'admin' | 'receptionist' | 'nurse' | 'pharmacist' | 'management' | 'patient';
+  role: 'admin' | 'receptionist' | 'nurse' | 'pharmacist' | 'management' | 'patient' | 'doctor';
   phone?: string;
   department?: string;
   profileImage?: string;

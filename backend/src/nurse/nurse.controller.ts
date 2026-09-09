@@ -14,16 +14,16 @@ export class NurseController {
   }
 
   @Get('vitals')
-  findAll() { return this.nurseService.findAllVitals(); }
+  findAll(@CurrentUser() user: any) { return this.nurseService.findAllVitals(user); }
 
   @Get('patient/:id/history')
-  getHistory(@Param('id') id: string) {
-    return this.nurseService.getPatientFullMedicalHistory(id);
+  getHistory(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.nurseService.getPatientFullMedicalHistory(id, user);
   }
 
   @Get('vitals/patient/:patientId')
-  byPatient(@Param('patientId') patientId: string) {
-    return this.nurseService.findVitalsByPatient(patientId);
+  byPatient(@Param('patientId') patientId: string, @CurrentUser() user: any) {
+    return this.nurseService.findVitalsByPatient(patientId, user);
   }
 
   @Get('vitals/:id')

@@ -100,8 +100,22 @@ export class ReceptionistService {
     return { success: true };
   }
 
-  async getTodayAppointments() {
+  async getTodayAppointments(user?: any) {
     const today = new Date().toISOString().split('T')[0];
+    if (user?.role === 'doctor') {
+      const qb = this.appointmentRepo.createQueryBuilder('a')
+        .where('a.appointmentDate = :today', { today });
+      const doctorNameTerm = user.lastName ? `%${user.lastName}%` : '';
+      if (doctorNameTerm) {
+        qb.andWhere('(a.doctorId = :doctorId OR (a.doctorId IS NULL AND a.doctorName ILIKE :docName))', {
+          doctorId: user.id,
+          docName: doctorNameTerm,
+        });
+      } else {
+        qb.andWhere('a.doctorId = :doctorId', { doctorId: user.id });
+      }
+      return qb.orderBy('a.appointmentTime', 'ASC').getMany();
+    }
     return this.appointmentRepo.find({ where: { appointmentDate: today }, order: { appointmentTime: 'ASC' } });
   }
 

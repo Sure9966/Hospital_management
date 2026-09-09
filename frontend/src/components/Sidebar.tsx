@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { clearAuth, getUser } from '@/lib/auth';
 import { useSocket } from '@/lib/useSocket';
 import toast from 'react-hot-toast';
@@ -60,10 +60,21 @@ export default function Sidebar({ role }: { role: string }) {
   const currentTab = searchParams.get('tab');
   const pathname = usePathname();
   const router = useRouter();
-  const { notifications, unreadCount, markRead } = useSocket();
+  const { notifications, unreadCount, markRead, connectionStatus } = useSocket();
   const [notifOpen, setNotifOpen] = useState(false);
   const user = getUser();
   const menus = roleMenus[role] || [];
+
+  // Debug logging
+  useEffect(() => {
+    console.log('🔔 Sidebar notification state:', {
+      notificationsCount: notifications.length,
+      unreadCount,
+      connectionStatus,
+      role,
+      userId: user?.id
+    });
+  }, [notifications, unreadCount, connectionStatus, role, user?.id]);
 
   const handleLogout = () => {
     clearAuth();
@@ -107,6 +118,21 @@ export default function Sidebar({ role }: { role: string }) {
             <span className="nav-icon">🔔</span>
             Notifications
             {unreadCount > 0 && <span className="nav-badge">{unreadCount}</span>}
+            <span style={{ 
+              marginLeft: 'auto', 
+              fontSize: '10px', 
+              padding: '2px 6px', 
+              borderRadius: '4px',
+              background: connectionStatus === 'connected' ? 'rgba(16, 185, 129, 0.15)' : 
+                         connectionStatus === 'connecting' ? 'rgba(245, 158, 11, 0.15)' : 
+                         'rgba(239, 68, 68, 0.15)',
+              color: connectionStatus === 'connected' ? '#34d399' : 
+                     connectionStatus === 'connecting' ? '#fbbf24' : 
+                     '#f87171',
+              fontWeight: 600
+            }}>
+              {connectionStatus === 'connected' ? '●' : connectionStatus === 'connecting' ? '○' : '○'}
+            </span>
           </button>
         </nav>
 
@@ -135,7 +161,7 @@ export default function Sidebar({ role }: { role: string }) {
         <div className="notif-header">
           <div>
             <h3 style={{ fontSize: 15, fontWeight: 700 }}>Notifications</h3>
-            <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>{notifications.length} total</p>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>{notifications.length} total, {unreadCount} unread</p>
           </div>
           <button className="btn btn-secondary btn-sm btn-icon" onClick={() => setNotifOpen(false)}>✕</button>
         </div>
@@ -147,11 +173,14 @@ export default function Sidebar({ role }: { role: string }) {
               <p>No new notifications</p>
             </div>
           ) : (
-            notifications.map((n, i) => (
-              <div key={i} className={`notif-item ${!n.isRead ? 'unread' : ''}`}>
+            notifications.map((n) => (
+              <div key={n.id || n.createdAt} className={`notif-item ${!n.isRead ? 'unread' : ''}`}>
                 <div className="notif-title">{n.title}</div>
                 <div className="notif-message">{n.message}</div>
-                <div className="notif-time">{new Date(n.createdAt).toLocaleTimeString()}</div>
+                <div className="notif-meta">
+                  <span className="notif-time">{new Date(n.createdAt).toLocaleTimeString()}</span>
+                  <span className="notif-type">{n.type || 'general'}</span>
+                </div>
               </div>
             ))
           )}

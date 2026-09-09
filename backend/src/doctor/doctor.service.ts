@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { DoctorConsultation, ConsultationStatus } from './doctor-consultation.entity';
@@ -26,9 +26,15 @@ export class DoctorService {
     private appointmentRepo: Repository<Appointment>,
   ) { }
   async createConsultation(data: Partial<DoctorConsultation>, doctorUser?: any) {
+    const formattedDoctorName = doctorUser
+      ? (doctorUser.firstName?.startsWith('Dr.')
+          ? `${doctorUser.firstName} ${doctorUser.lastName}`
+          : `Dr. ${doctorUser.firstName} ${doctorUser.lastName}`)
+      : 'Doctor';
+
     const consultation = this.consultationRepo.create({
       ...data,
-      doctorName: data.doctorName || (doctorUser ? `Dr. ${doctorUser.firstName} ${doctorUser.lastName}` : 'Dr. Sarah Jenkins'),
+      doctorName: data.doctorName || formattedDoctorName,
       doctorId: doctorUser?.id,
     });
     const saved = await this.consultationRepo.save(consultation);
@@ -42,32 +48,76 @@ export class DoctorService {
       }
     }
 
-    // Send notification to Pharmacy if test orders or prescriptions created
+    // Send notification to nurse about consultation
+    const idempotencyKey = `consultation-${saved.id}-${Date.now()}`;
     await this.notificationsService.sendToRole(
       'New Doctor Consultation Note',
       `Dr. ${saved.doctorName} created consultation record for patient ${saved.patientName} (${saved.patientId}).`,
       'nurse',
       'consultation',
       saved.id,
+      undefined,
+      idempotencyKey,
     );
 
     return saved;
   }
 
-  async findAllConsultations() {
+  async findAllConsultations(user?: any) {
+    if (user?.role === 'doctor') {
+      const qb = this.consultationRepo.createQueryBuilder('c');
+      const doctorNameTerm = user.lastName ? `%${user.lastName}%` : '';
+      qb.where(
+        '(c.doctorId = :doctorId OR c.patientId IN (SELECT p.patientId FROM patients p WHERE p.assignedDoctorId = :doctorId))',
+        { doctorId: user.id },
+      );
+      if (doctorNameTerm) {
+        qb.orWhere(
+          '(c.patientId IN (SELECT p.patientId FROM patients p WHERE p.assignedDoctorId IS NULL AND (p.assignedDoctorName ILIKE :docName OR p.admittedBy ILIKE :docName)))',
+          { docName: doctorNameTerm },
+        );
+      }
+      return qb.orderBy('c.createdAt', 'DESC').getMany();
+    }
     return this.consultationRepo.find({ order: { createdAt: 'DESC' } });
   }
 
-  async findConsultationsByPatient(patientId: string) {
+  async findConsultationsByPatient(patientId: string, user?: any) {
+    if (user?.role === 'doctor') {
+      const patient = await this.patientRepo.findOne({
+        where: [{ patientId }, { id: patientId }],
+      });
+      if (patient) {
+        const isAssigned =
+          patient.assignedDoctorId === user.id ||
+          (!patient.assignedDoctorId &&
+            user.lastName &&
+            ((patient.assignedDoctorName &&
+              patient.assignedDoctorName.toLowerCase().includes(user.lastName.toLowerCase())) ||
+              (patient.admittedBy &&
+                patient.admittedBy.toLowerCase().includes(user.lastName.toLowerCase()))));
+        if (!isAssigned) {
+          throw new ForbiddenException(
+            'Access denied: Patient is assigned to another doctor',
+          );
+        }
+      }
+    }
     return this.consultationRepo.find({ where: { patientId }, order: { createdAt: 'DESC' } });
   }
 
-  async updateConsultation(id: string, data: Partial<DoctorConsultation>) {
+  async updateConsultation(id: string, data: Partial<DoctorConsultation>, user?: any) {
+    if (user?.role === 'doctor') {
+      const existing = await this.consultationRepo.findOne({ where: { id } });
+      if (existing && existing.patientId) {
+        await this.findConsultationsByPatient(existing.patientId, user);
+      }
+    }
     await this.consultationRepo.update(id, data);
     return this.consultationRepo.findOne({ where: { id } });
   }
 
-  async getPatientFullEhr(patientIdentifier: string) {
+  async getPatientFullEhr(patientIdentifier: string, user?: any) {
     let patient = await this.patientRepo.findOne({ where: { patientId: patientIdentifier } });
     if (!patient) {
       patient = await this.patientRepo.findOne({ where: { id: patientIdentifier } });
@@ -75,6 +125,22 @@ export class DoctorService {
 
     if (!patient) {
       throw new NotFoundException('Patient record not found');
+    }
+
+    if (user?.role === 'doctor') {
+      const isAssigned =
+        patient.assignedDoctorId === user.id ||
+        (!patient.assignedDoctorId &&
+          user.lastName &&
+          ((patient.assignedDoctorName &&
+            patient.assignedDoctorName.toLowerCase().includes(user.lastName.toLowerCase())) ||
+            (patient.admittedBy &&
+              patient.admittedBy.toLowerCase().includes(user.lastName.toLowerCase()))));
+      if (!isAssigned) {
+        throw new ForbiddenException(
+          'Access denied: You are only authorized to view EHR records for your assigned patients',
+        );
+      }
     }
 
     const vitals = await this.vitalRepo.find({
@@ -173,38 +239,48 @@ export class DoctorService {
     await this.patientRepo.save(patient);
 
     if (doctorId) {
+      const idempotencyKey = `doctor-assignment-${patient.id}-${doctorId}-${Date.now()}`;
       await this.notificationsService.sendToUser(
         'New Patient Assigned',
         `Patient ${patient.firstName} ${patient.lastName} (${patient.patientId}) has been assigned to you.`,
         doctorId,
         'doctor_assignment',
         patient.id,
+        undefined,
+        idempotencyKey,
       );
     }
 
+    const idempotencyKey = `doctor-assignment-nurse-${patient.id}-${Date.now()}`;
     await this.notificationsService.sendToRole(
       'Hospital Attending Doctor Assigned',
       `Attending Doctor ${doctorName} assigned to patient ${patient.firstName} ${patient.lastName} (${patient.patientId}).`,
       'nurse',
       'doctor_assignment',
       patient.id,
+      undefined,
+      idempotencyKey,
     );
 
     return patient;
   }
 
-  async getMyAppointments(doctorId: string) {
-    return this.appointmentRepo.find({
-      where: {
-        doctorId: doctorId,
-      },
-      order: {
-        appointmentDate: 'ASC',
-        appointmentTime: 'ASC',
-      },
-    });
+  async getMyAppointments(doctorId: string, user?: any) {
+    const qb = this.appointmentRepo.createQueryBuilder('a');
+    const doctorNameTerm = user?.lastName ? `%${user.lastName}%` : '';
+    if (doctorNameTerm) {
+      qb.where('a.doctorId = :doctorId OR (a.doctorId IS NULL AND a.doctorName ILIKE :docName)', {
+        doctorId,
+        docName: doctorNameTerm,
+      });
+    } else {
+      qb.where('a.doctorId = :doctorId', { doctorId });
+    }
+    return qb
+      .orderBy('a.appointmentDate', 'ASC')
+      .addOrderBy('a.appointmentTime', 'ASC')
+      .getMany();
   }
-
 
   async dischargePatient(
     patientIdentifier: string,
@@ -223,6 +299,20 @@ export class DoctorService {
 
     if (!patient) {
       throw new NotFoundException('Patient record not found');
+    }
+
+    if (doctorUser?.role === 'doctor') {
+      const isAssigned =
+        patient.assignedDoctorId === doctorUser.id ||
+        (!patient.assignedDoctorId &&
+          doctorUser.lastName &&
+          ((patient.assignedDoctorName &&
+            patient.assignedDoctorName.toLowerCase().includes(doctorUser.lastName.toLowerCase())) ||
+            (patient.admittedBy &&
+              patient.admittedBy.toLowerCase().includes(doctorUser.lastName.toLowerCase()))));
+      if (!isAssigned) {
+        throw new ForbiddenException('Access denied: Patient is assigned to another doctor');
+      }
     }
 
     if (patient.status === 'discharged' as any) {
@@ -294,12 +384,15 @@ export class DoctorService {
       .execute();
 
     // Real-time Nurse notification
+    const idempotencyKey = `discharge-${patient.id}-${Date.now()}`;
     await this.notificationsService.sendToRole(
       '🏥 Patient Discharged',
       `${patient.firstName} ${patient.lastName} (${patient.patientId}) has been discharged by ${doctorName}. Please complete nursing discharge procedures.`,
       'nurse',
       'patient_discharge',
       patient.id,
+      undefined,
+      idempotencyKey,
     );
 
     return {

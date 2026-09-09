@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Vital } from './vital.entity';
@@ -52,11 +52,46 @@ export class NurseService {
     return saved;
   }
 
-  async findAllVitals() {
+  async findAllVitals(user?: any) {
+    if (user?.role === 'doctor') {
+      const qb = this.vitalRepo.createQueryBuilder('v');
+      const doctorNameTerm = user.lastName ? `%${user.lastName}%` : '';
+      qb.where(
+        'v.patientId IN (SELECT p.patientId FROM patients p WHERE p.assignedDoctorId = :doctorId)',
+        { doctorId: user.id },
+      );
+      if (doctorNameTerm) {
+        qb.orWhere(
+          'v.patientId IN (SELECT p.patientId FROM patients p WHERE p.assignedDoctorId IS NULL AND (p.assignedDoctorName ILIKE :docName OR p.admittedBy ILIKE :docName))',
+          { docName: doctorNameTerm },
+        );
+      }
+      return qb.orderBy('v.createdAt', 'DESC').getMany();
+    }
     return this.vitalRepo.find({ order: { createdAt: 'DESC' } });
   }
 
-  async findVitalsByPatient(patientId: string) {
+  async findVitalsByPatient(patientId: string, user?: any) {
+    if (user?.role === 'doctor') {
+      const patient = await this.patientRepo.findOne({
+        where: [{ patientId }, { id: patientId }],
+      });
+      if (patient) {
+        const isAssigned =
+          patient.assignedDoctorId === user.id ||
+          (!patient.assignedDoctorId &&
+            user.lastName &&
+            ((patient.assignedDoctorName &&
+              patient.assignedDoctorName.toLowerCase().includes(user.lastName.toLowerCase())) ||
+              (patient.admittedBy &&
+                patient.admittedBy.toLowerCase().includes(user.lastName.toLowerCase()))));
+        if (!isAssigned) {
+          throw new ForbiddenException(
+            'Access denied: Patient is assigned to another doctor',
+          );
+        }
+      }
+    }
     return this.vitalRepo.find({ where: { patientId }, order: { createdAt: 'DESC' } });
   }
 
@@ -69,7 +104,7 @@ export class NurseService {
     return this.findVitalById(id);
   }
 
-  async getPatientFullMedicalHistory(patientIdentifier: string) {
+  async getPatientFullMedicalHistory(patientIdentifier: string, user?: any) {
     let patient = await this.patientRepo.findOne({ where: { patientId: patientIdentifier } });
     if (!patient) {
       patient = await this.patientRepo.findOne({ where: { id: patientIdentifier } });
@@ -77,6 +112,22 @@ export class NurseService {
 
     if (!patient) {
       throw new NotFoundException('Patient record not found');
+    }
+
+    if (user?.role === 'doctor') {
+      const isAssigned =
+        patient.assignedDoctorId === user.id ||
+        (!patient.assignedDoctorId &&
+          user.lastName &&
+          ((patient.assignedDoctorName &&
+            patient.assignedDoctorName.toLowerCase().includes(user.lastName.toLowerCase())) ||
+            (patient.admittedBy &&
+              patient.admittedBy.toLowerCase().includes(user.lastName.toLowerCase()))));
+      if (!isAssigned) {
+        throw new ForbiddenException(
+          'Access denied: You are only authorized to view medical history for your assigned patients',
+        );
+      }
     }
 
     const vitalsHistory = await this.vitalRepo.find({

@@ -4,6 +4,8 @@ import DashboardLayout from '@/components/DashboardLayout';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import { useSearchParams } from 'next/navigation';
+import { getUser, User } from '@/lib/auth';
+
 const emptyPrescriptionItem = { medicineName: '', dosage: '1 tablet twice daily', duration: '5 days', quantity: 10, unitPrice: 15 };
 
 const emptyConsultationForm = {
@@ -20,10 +22,12 @@ const emptyConsultationForm = {
 
 export default function DoctorDashboard() {
   const searchParams = useSearchParams();
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [patients, setPatients] = useState<any[]>([]);
   const [vitals, setVitals] = useState<any[]>([]);
   const [appointments, setAppointments] = useState<any[]>([]);
   const [consultations, setConsultations] = useState<any[]>([]);
+  const [prescriptions, setPrescriptions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [showDischargeModal, setShowDischargeModal] = useState(false);
@@ -60,7 +64,7 @@ export default function DoctorDashboard() {
   const [prescriptionForm, setPrescriptionForm] = useState({
     patientId: '',
     patientName: '',
-    doctorName: 'Dr. Sarah Jenkins',
+    doctorName: 'Doctor',
     notes: 'Take medicines after meals with warm water.',
     items: [{ ...emptyPrescriptionItem }],
   });
@@ -68,10 +72,45 @@ export default function DoctorDashboard() {
 
   // Assign Doctor Modal Form
   const [showAssignModal, setShowAssignModal] = useState(false);
-  const [assignForm, setAssignForm] = useState({ patientId: '', patientName: '', doctorId: '', doctorName: 'Dr. Sarah Jenkins' });
+  const [assignForm, setAssignForm] = useState({ patientId: '', patientName: '', doctorId: '', doctorName: 'Doctor' });
   const [savingAssign, setSavingAssign] = useState(false);
   const [assignDepartment, setAssignDepartment] = useState('');
   const [eligibleDoctors, setEligibleDoctors] = useState<any[]>([]);
+
+  // Bed Request Modal
+  const [showBedRequestModal, setShowBedRequestModal] = useState(false);
+  const [bedRequestForm, setBedRequestForm] = useState({
+    patientId: '',
+    patientName: '',
+    doctorName: 'Doctor',
+    diagnosis: '',
+    requestedWard: 'General',
+    notes: '',
+  });
+  const [savingBedRequest, setSavingBedRequest] = useState(false);
+  const [bedRequests, setBedRequests] = useState<any[]>([]);
+
+  // Resolve Doctor Name and Doctor ID
+  const doctorFullName = currentUser
+    ? (currentUser.firstName?.startsWith('Dr.')
+        ? `${currentUser.firstName} ${currentUser.lastName}`
+        : `Dr. ${currentUser.firstName} ${currentUser.lastName}`)
+    : 'Doctor';
+  const doctorId = currentUser?.id || '';
+
+  useEffect(() => {
+    const user = getUser();
+    if (user) {
+      setCurrentUser(user);
+      const name = user.firstName?.startsWith('Dr.')
+        ? `${user.firstName} ${user.lastName}`
+        : `Dr. ${user.firstName} ${user.lastName}`;
+      setPrescriptionForm(f => ({ ...f, doctorName: name }));
+      setAssignForm(f => ({ ...f, doctorId: user.id, doctorName: name }));
+      setBedRequestForm(f => ({ ...f, doctorName: name }));
+      setConsultForm(f => ({ ...f, admittedByDoctor: name }));
+    }
+  }, []);
 
   useEffect(() => {
     const url = assignDepartment ? `/users/doctors?department=${encodeURIComponent(assignDepartment)}` : '/users/doctors';
@@ -80,36 +119,38 @@ export default function DoctorDashboard() {
       .catch(() => setEligibleDoctors([]));
   }, [assignDepartment]);
 
-  // Bed Request Modal
-  const [showBedRequestModal, setShowBedRequestModal] = useState(false);
-  const [bedRequestForm, setBedRequestForm] = useState({
-    patientId: '',
-    patientName: '',
-    doctorName: 'Dr. Sarah Jenkins',
-    diagnosis: '',
-    requestedWard: 'General',
-    notes: '',
-  });
-  const [savingBedRequest, setSavingBedRequest] = useState(false);
-  const [bedRequests, setBedRequests] = useState<any[]>([]);
-
   const loadData = () => {
     setLoading(true);
+    const user = getUser();
     Promise.all([
       api.get('/patients'),
       api.get('/nurse/vitals'),
-      api.get('/receptionist/appointments/today'),
+      api.get('/doctor/appointments/my'),
       api.get('/doctor/consultations'),
       api.get('/beds/admissions'),
+      api.get('/pharmacy/prescriptions').catch(() => ({ data: [] })),
     ])
-      .then(([patRes, vitRes, apptRes, consultRes, admRes]) => {
-        setPatients(patRes.data || []);
+      .then(([patRes, vitRes, apptRes, consultRes, admRes, rxRes]) => {
+        const patData = patRes.data || [];
+        setPatients(patData);
         setVitals(vitRes.data || []);
         setAppointments(apptRes.data || []);
         setConsultations(consultRes.data || []);
-        // Only show requests submitted by doctors (i.e. from this dashboard)
-        const myRequests = (admRes.data || []).filter((a: any) => a.notes && a.notes.includes('[Doctor Bed Request]'));
+
+        // Only show bed requests submitted for or by this doctor
+        const myRequests = (admRes.data || []).filter((a: any) =>
+          (a.doctorName && user?.lastName && a.doctorName.toLowerCase().includes(user.lastName.toLowerCase())) ||
+          (a.notes && user?.lastName && a.notes.toLowerCase().includes(user.lastName.toLowerCase())) ||
+          (a.notes && a.notes.includes('[Doctor Bed Request]'))
+        );
         setBedRequests(myRequests);
+
+        // Prescriptions for this doctor's assigned patients
+        const myRx = (rxRes.data || []).filter((r: any) =>
+          patData.some((p: any) => p.patientId === r.patientId) ||
+          (r.doctorName && user?.lastName && r.doctorName.toLowerCase().includes(user.lastName.toLowerCase()))
+        );
+        setPrescriptions(myRx);
       })
       .catch(() => toast.error('Failed to load doctor dashboard records'))
       .finally(() => setLoading(false));
@@ -269,7 +310,7 @@ export default function DoctorDashboard() {
       });
       toast.success('🛏️ Bed request sent to Reception & Management!');
       setShowBedRequestModal(false);
-      setBedRequestForm({ patientId: '', patientName: '', doctorName: 'Dr. Sarah Jenkins', diagnosis: '', requestedWard: 'General', notes: '' });
+      setBedRequestForm({ patientId: '', patientName: '', doctorName: doctorFullName, diagnosis: '', requestedWard: 'General', notes: '' });
       loadData();
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Failed to send bed request');
@@ -306,21 +347,27 @@ export default function DoctorDashboard() {
   const filteredPatients = patients.filter(p =>
     `${p.firstName} ${p.lastName}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
     p.patientId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (p.diagnosis && p.diagnosis.toLowerCase().includes(searchQuery.toLowerCase())) ||
     (p.admittedBy && p.admittedBy.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   return (
     <DashboardLayout role="doctor">
       <div className="topbar">
-        <div className="topbar-title">🩺 Doctor Clinical Management Dashboard</div>
+        <div>
+          <div className="topbar-title">🩺 Doctor Clinical Management Dashboard</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+            Logged in as <strong style={{ color: 'var(--primary-light)' }}>{doctorFullName}</strong> {currentUser?.department ? `• Department: ${currentUser.department}` : ''}
+          </div>
+        </div>
         <div className="flex gap-2">
-          <button className="btn btn-primary" onClick={() => { setConsultForm({ ...emptyConsultationForm }); setShowConsultModal(true); }}>
+          <button className="btn btn-primary" onClick={() => { setConsultForm({ ...emptyConsultationForm, admittedByDoctor: doctorFullName }); setShowConsultModal(true); }}>
             📝 Add Consultation Note
           </button>
-          <button className="btn btn-secondary" onClick={() => setShowPrescriptionModal(true)}>
+          <button className="btn btn-secondary" onClick={() => { setPrescriptionForm(f => ({ ...f, doctorName: doctorFullName })); setShowPrescriptionModal(true); }}>
             💊 Create Prescription
           </button>
-          <button className="btn" style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', color: '#fff', border: 'none' }} onClick={() => setShowBedRequestModal(true)}>
+          <button className="btn" style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', color: '#fff', border: 'none' }} onClick={() => { setBedRequestForm(f => ({ ...f, doctorName: doctorFullName })); setShowBedRequestModal(true); }}>
             🛏️ Request Bed
           </button>
         </div>
@@ -355,10 +402,10 @@ export default function DoctorDashboard() {
         {/* Operational Key Metrics */}
         <div className="stats-grid">
           {[
-            { icon: '🏥', label: 'Total Patients', value: patients.length, color: '#6366f1', gradient: 'linear-gradient(135deg,#6366f1,#818cf8)' },
-            { icon: '📅', label: 'Today Appointments', value: appointments.length, color: '#0ea5e9', gradient: 'linear-gradient(135deg,#0ea5e9,#38bdf8)' },
-            { icon: '🚨', label: 'Critical Vitals', value: vitals.filter(v => v.status === 'critical').length, color: '#ef4444', gradient: 'linear-gradient(135deg,#ef4444,#f87171)' },
-            { icon: '🩺', label: 'Consultation Notes', value: consultations.length, color: '#10b981', gradient: 'linear-gradient(135deg,#10b981,#34d399)' },
+            { icon: '🏥', label: 'My Assigned Patients', value: patients.length, color: '#6366f1', gradient: 'linear-gradient(135deg,#6366f1,#818cf8)' },
+            { icon: '📅', label: 'My Appointments', value: appointments.length, color: '#0ea5e9', gradient: 'linear-gradient(135deg,#0ea5e9,#38bdf8)' },
+            { icon: '🚨', label: 'Assigned Critical Vitals', value: vitals.filter(v => v.status === 'critical').length, color: '#ef4444', gradient: 'linear-gradient(135deg,#ef4444,#f87171)' },
+            { icon: '🩺', label: 'My Consultations', value: consultations.length, color: '#10b981', gradient: 'linear-gradient(135deg,#10b981,#34d399)' },
           ].map(s => (
             <div key={s.label} className="stat-card" style={{ '--gradient': s.gradient } as any}>
               <div className="stat-icon" style={{ background: `${s.color}22`, color: s.color }}>{s.icon}</div>
@@ -372,7 +419,7 @@ export default function DoctorDashboard() {
         {activeTab === 'queue' && (
           <div className="card">
             <div className="card-header">
-              <span className="card-title">📅 OPD Consultation Waiting Queue Today ({appointments.length})</span>
+              <span className="card-title">📅 My OPD Consultation Waiting Queue Today ({appointments.length})</span>
             </div>
             <div className="table-container">
               {appointments.length === 0 ? (
@@ -399,13 +446,13 @@ export default function DoctorDashboard() {
                         </td>
                         <td>{a.reason || 'General OPD Consultation'}</td>
                         <td>
-                          <span className="badge badge-info">Dr. {a.doctorName}</span>
+                          <span className="badge badge-info">{a.doctorName}</span>
                         </td>
                         <td><span className={statusBadge(a.status)}>{a.status}</span></td>
                         <td>
                           <div className="flex gap-2">
                             <button className="btn btn-primary btn-sm" onClick={() => {
-                              setConsultForm(f => ({ ...f, patientId: a.patientId, patientName: a.patientName, admittedByDoctor: a.doctorName }));
+                              setConsultForm(f => ({ ...f, patientId: a.patientId, patientName: a.patientName, admittedByDoctor: a.doctorName || doctorFullName }));
                               setShowConsultModal(true);
                             }}>
                               📝 Consult
@@ -428,19 +475,28 @@ export default function DoctorDashboard() {
         {activeTab === 'patients' && (
           <div className="card">
             <div className="card-header" style={{ flexWrap: 'wrap', gap: 12 }}>
-              <span className="card-title">🏥 Patient EHR Database & Hospital Assigned Doctors ({filteredPatients.length})</span>
+              <div>
+                <span className="card-title">🏥 My Assigned Patient Records & Files ({filteredPatients.length})</span>
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                  Showing exclusively patients assigned to <strong style={{ color: 'var(--primary-light)' }}>{doctorFullName}</strong>
+                </p>
+              </div>
               <input
                 type="text"
                 className="form-control form-control-sm"
-                placeholder="🔍 Search patient name, ID, or doctor..."
+                placeholder="🔍 Search assigned patient name, ID, or diagnosis..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                style={{ width: 260 }}
+                style={{ width: 280 }}
               />
             </div>
             <div className="table-container">
               {filteredPatients.length === 0 ? (
-                <div className="empty-state"><div className="empty-icon">🏥</div><h3>No matching patient files found</h3></div>
+                <div className="empty-state">
+                  <div className="empty-icon">🏥</div>
+                  <h3>No matching assigned patient files found</h3>
+                  <p>Only patients assigned to you are displayed in this view.</p>
+                </div>
               ) : (
                 <table>
                   <thead>
@@ -466,8 +522,8 @@ export default function DoctorDashboard() {
                         <td><span className={statusBadge(p.status)}>{p.status}</span></td>
                         <td>
                           <div className="flex items-center gap-2">
-                            {p.admittedBy ? (
-                              <strong style={{ color: 'var(--primary-light)', fontSize: 13 }}>Dr. {p.admittedBy}</strong>
+                            {p.admittedBy || p.assignedDoctorName ? (
+                              <strong style={{ color: 'var(--primary-light)', fontSize: 13 }}>{p.assignedDoctorName || p.admittedBy}</strong>
                             ) : (
                               <span className="text-muted text-xs">Unassigned</span>
                             )}
@@ -475,7 +531,12 @@ export default function DoctorDashboard() {
                               className="btn btn-secondary btn-sm"
                               style={{ padding: '2px 8px', fontSize: 11 }}
                               onClick={() => {
-                                setAssignForm({ patientId: p.patientId, patientName: `${p.firstName} ${p.lastName}`, doctorId: p.assignedDoctorId || '', doctorName: p.admittedBy || 'Dr. Sarah Jenkins' });
+                                setAssignForm({
+                                  patientId: p.patientId,
+                                  patientName: `${p.firstName} ${p.lastName}`,
+                                  doctorId: p.assignedDoctorId || doctorId,
+                                  doctorName: p.assignedDoctorName || p.admittedBy || doctorFullName,
+                                });
                                 setShowAssignModal(true);
                               }}
                             >
@@ -612,38 +673,50 @@ export default function DoctorDashboard() {
         {activeTab === 'tests' && (
           <div className="card">
             <div className="card-header">
-              <span className="card-title">🧪 Laboratory & Radiology Test Orders & Diagnostic Results</span>
+              <span className="card-title">🧪 Laboratory & Radiology Test Orders for Assigned Patients</span>
             </div>
             <div className="table-container">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Test ID</th>
-                    <th>Patient Name</th>
-                    <th>Test Description</th>
-                    <th>Department</th>
-                    <th>Status</th>
-                    <th>Diagnostic Finding</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[
-                    { id: 'LAB-101', patient: 'John Doe', name: 'Complete Blood Count (CBC)', cat: 'Hematology', status: 'Completed', result: 'Hb: 14.2 g/dL, WBC: 6,800 /uL, Platelets: 250,000 /uL' },
-                    { id: 'LAB-102', patient: 'Sarah Connor', name: 'Comprehensive Metabolic Panel', cat: 'Biochemistry', status: 'Completed', result: 'Fasting Glucose: 95 mg/dL, Creatinine: 0.9 mg/dL' },
-                    { id: 'LAB-103', patient: 'Michael Scott', name: 'Chest X-Ray PA View', cat: 'Radiology', status: 'Completed', result: 'Lungs clear, no pulmonary infiltrates.' },
-                    { id: 'LAB-104', patient: 'Emma Watson', name: 'Lipid Profile Panel', cat: 'Biochemistry', status: 'Pending', result: 'Sample in Central Laboratory for processing.' },
-                  ].map(t => (
-                    <tr key={t.id}>
-                      <td><strong>{t.id}</strong></td>
-                      <td>{t.patient}</td>
-                      <td>{t.name}</td>
-                      <td><span className="badge badge-info">{t.cat}</span></td>
-                      <td><span className="badge badge-success">{t.status}</span></td>
-                      <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{t.result}</td>
+              {consultations.filter(c => c.testOrders && c.testOrders.length > 0).length === 0 ? (
+                <div className="empty-state">
+                  <div className="empty-icon">🧪</div>
+                  <h3>No pending test orders for your assigned patients</h3>
+                  <p>When you prescribe diagnostic laboratory or radiology tests in consultation notes, they will appear here.</p>
+                </div>
+              ) : (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Patient Name & ID</th>
+                      <th>Diagnostic Tests Ordered</th>
+                      <th>Attending Doctor</th>
+                      <th>Order Date</th>
+                      <th>Status</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {consultations
+                      .filter(c => c.testOrders && c.testOrders.length > 0)
+                      .map((c, idx) => (
+                        <tr key={c.id || idx}>
+                          <td>
+                            <strong>{c.patientName}</strong>
+                            <br /><span className="text-muted text-xs">{c.patientId}</span>
+                          </td>
+                          <td>
+                            <div className="flex gap-1 flex-wrap">
+                              {(Array.isArray(c.testOrders) ? c.testOrders : String(c.testOrders).split(',')).map((t: string, i: number) => (
+                                <span key={i} className="badge badge-info">{t.trim()}</span>
+                              ))}
+                            </div>
+                          </td>
+                          <td><span className="badge badge-purple">{c.doctorName}</span></td>
+                          <td>{new Date(c.createdAt || Date.now()).toLocaleDateString()}</td>
+                          <td><span className="badge badge-success">Active Order</span></td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         )}
@@ -651,12 +724,63 @@ export default function DoctorDashboard() {
         {/* TAB 6: Prescriptions Created */}
         {activeTab === 'prescriptions' && (
           <div className="card">
-            <div className="card-header">
-              <span className="card-title">💊 Doctor Created Prescriptions</span>
+            <div className="card-header flex justify-between items-center">
+              <span className="card-title">💊 Doctor Created Prescriptions ({prescriptions.length})</span>
               <button className="btn btn-primary btn-sm" onClick={() => setShowPrescriptionModal(true)}>+ New Prescription</button>
             </div>
             <div className="card-body">
-              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Prescriptions created here automatically synchronize with the Pharmacy fulfillment dashboard and generate print-ready billing receipts.</p>
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 14 }}>
+                Prescriptions created for your assigned patients automatically synchronize with Pharmacy fulfillment.
+              </p>
+              {prescriptions.length === 0 ? (
+                <div className="empty-state">
+                  <div className="empty-icon">💊</div>
+                  <h3>No prescriptions created yet for your patients</h3>
+                  <p>Click "+ New Prescription" to write a digital prescription for any assigned patient.</p>
+                </div>
+              ) : (
+                <div className="table-container">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Rx ID</th>
+                        <th>Patient Name & ID</th>
+                        <th>Prescribed Medicines</th>
+                        <th>Status</th>
+                        <th>Billing</th>
+                        <th>Total Cost</th>
+                        <th>Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {prescriptions.map((p: any) => (
+                        <tr key={p.id}>
+                          <td><code>{p.prescriptionId}</code></td>
+                          <td>
+                            <strong>{p.patientName}</strong>
+                            <br /><span className="text-muted text-xs">{p.patientId}</span>
+                          </td>
+                          <td>
+                            <div style={{ fontSize: 12 }}>
+                              {p.medicines && p.medicines.length > 0 ? (
+                                p.medicines.map((m: any, mi: number) => (
+                                  <div key={mi}>• {m.name} ({m.dosage})</div>
+                                ))
+                              ) : (
+                                <span className="text-muted">No medicines</span>
+                              )}
+                            </div>
+                          </td>
+                          <td><span className={statusBadge(p.status)}>{p.status}</span></td>
+                          <td><span className="badge badge-info">{p.billingStatus || 'unbilled'}</span></td>
+                          <td><strong>${p.totalCost || 0}</strong></td>
+                          <td style={{ fontSize: 11 }}>{new Date(p.createdAt).toLocaleDateString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -733,7 +857,7 @@ export default function DoctorDashboard() {
                 <div className="form-grid form-grid-2" style={{ marginBottom: 14 }}>
                   <div className="form-group">
                     <label className="form-label">Hospital Assigned Doctor Name (Visible to Patient)</label>
-                    <input className="form-control" placeholder="Dr. Sarah Jenkins" value={consultForm.admittedByDoctor} onChange={e => setConsultForm({ ...consultForm, admittedByDoctor: e.target.value })} />
+                    <input className="form-control" placeholder={doctorFullName} value={consultForm.admittedByDoctor} onChange={e => setConsultForm({ ...consultForm, admittedByDoctor: e.target.value })} />
                   </div>
                   <div className="form-group">
                     <label className="form-label">Consultation Status</label>

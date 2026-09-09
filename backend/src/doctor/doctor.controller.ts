@@ -14,23 +14,23 @@ export class DoctorController {
   }
 
   @Get('consultations')
-  findAllConsultations() {
-    return this.doctorService.findAllConsultations();
+  findAllConsultations(@CurrentUser() user: any) {
+    return this.doctorService.findAllConsultations(user);
   }
 
   @Get('consultations/patient/:patientId')
-  findConsultationsByPatient(@Param('patientId') patientId: string) {
-    return this.doctorService.findConsultationsByPatient(patientId);
+  findConsultationsByPatient(@Param('patientId') patientId: string, @CurrentUser() user: any) {
+    return this.doctorService.findConsultationsByPatient(patientId, user);
   }
 
   @Put('consultations/:id')
-  updateConsultation(@Param('id') id: string, @Body() body: any) {
-    return this.doctorService.updateConsultation(id, body);
+  updateConsultation(@Param('id') id: string, @Body() body: any, @CurrentUser() user: any) {
+    return this.doctorService.updateConsultation(id, body, user);
   }
 
   @Get('patient/:id/ehr')
-  getPatientEhr(@Param('id') id: string) {
-    return this.doctorService.getPatientFullEhr(id);
+  getPatientEhr(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.doctorService.getPatientFullEhr(id, user);
   }
 
   @Post('patient/:id/assign-doctor')
@@ -40,7 +40,7 @@ export class DoctorController {
 
   @Get('appointments/my')
   getMyAppointments(@CurrentUser() user: any) {
-    return this.doctorService.getMyAppointments(user.id);
+    return this.doctorService.getMyAppointments(user.id, user);
   }
 
   @Post('patient/:id/discharge')

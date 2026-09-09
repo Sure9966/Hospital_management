@@ -14,17 +14,23 @@ export class PatientsController {
   }
 
   @Get()
-  findAll() { return this.patientsService.findAll(); }
+  findAll(@CurrentUser() user: any, @Query('doctorId') doctorId?: string) {
+    return this.patientsService.findAll(user, doctorId);
+  }
 
   @Get('search')
-  search(@Query('q') q: string) { return this.patientsService.search(q); }
+  search(@Query('q') q: string, @CurrentUser() user: any) {
+    return this.patientsService.search(q, user);
+  }
 
   @Get(':id')
-  findOne(@Param('id') id: string) { return this.patientsService.findOne(id); }
+  findOne(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.patientsService.findOne(id, user);
+  }
 
   @Put(':id')
-  update(@Param('id') id: string, @Body() body: any) {
-    return this.patientsService.update(id, body);
+  update(@Param('id') id: string, @Body() body: any, @CurrentUser() user: any) {
+    return this.patientsService.update(id, body, user);
   }
 
   @Delete(':id')

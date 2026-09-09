@@ -1,7 +1,6 @@
 'use client';
-
-import BedManagementPage from '@/app/dashboard/admin/beds/page';
+import BedManagementView from '@/components/BedManagementView';
 
 export default function NurseBedPage() {
-    return <BedManagementPage role="nurse" />;
+  return <BedManagementView role="nurse" />;
 }

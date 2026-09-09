@@ -9,6 +9,17 @@ import {
 } from 'typeorm';
 import { User } from '../users/user.entity';
 
+export type DeliveryStatus = 'pending' | 'delivered' | 'failed' | 'retrying';
+
+export interface NotificationMetadata {
+  idempotencyKey?: string;
+  deadLetterReason?: string;
+  deadLetterAt?: string;
+  retryAttempts?: number;
+  retriedFromDeadLetterAt?: string;
+  [key: string]: any;
+}
+
 @Entity('notifications')
 export class Notification {
   @PrimaryGeneratedColumn('uuid')
@@ -50,4 +61,23 @@ export class Notification {
 
   @UpdateDateColumn()
   updatedAt: Date;
+
+  @Column({
+    type: 'enum',
+    enum: ['pending', 'delivered', 'failed', 'retrying'],
+    default: 'pending'
+  })
+  deliveryStatus: DeliveryStatus;
+
+  @Column({ default: 0 })
+  retryCount: number;
+
+  @Column({ nullable: true })
+  lastError: string;
+
+  @Column({
+    type: 'json',
+    nullable: true,
+  })
+  metadata: NotificationMetadata;
 }

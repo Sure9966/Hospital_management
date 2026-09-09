@@ -165,7 +165,7 @@ export default function LoginPage() {
                 <input
                   type="email"
                   className="form-control styled-input"
-                  placeholder="name@hospital.com"
+                  placeholder="name@gmail.com"
                   value={form.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
                   required

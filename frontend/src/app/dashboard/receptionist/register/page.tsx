@@ -144,7 +144,7 @@ export default function RegisterPatient() {
                   </div>
                   <div className="form-group">
                     <label className="form-label">Phone *</label>
-                    <input className="form-control" placeholder="+1 (555) 000-0000" value={form.phone} onChange={e => set('phone', e.target.value)} required />
+                    <input className="form-control" placeholder="+91 (555) 000-0000" value={form.phone} onChange={e => set('phone', e.target.value)} required />
                   </div>
                   <div className="form-group">
                     <label className="form-label">Email</label>
@@ -169,7 +169,7 @@ export default function RegisterPatient() {
                   </div>
                   <div className="form-group">
                     <label className="form-label">Contact Phone</label>
-                    <input className="form-control" placeholder="+1 (555) 000-0000" value={form.emergencyPhone} onChange={e => set('emergencyPhone', e.target.value)} />
+                    <input className="form-control" placeholder="+91 (555) 000-0000" value={form.emergencyPhone} onChange={e => set('emergencyPhone', e.target.value)} />
                   </div>
                 </div>
               </div>

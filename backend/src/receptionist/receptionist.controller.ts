@@ -17,7 +17,7 @@ export class ReceptionistController {
   findAll() { return this.receptionistService.findAllAppointments(); }
 
   @Get('appointments/today')
-  getToday() { return this.receptionistService.getTodayAppointments(); }
+  getToday(@CurrentUser() user: any) { return this.receptionistService.getTodayAppointments(user); }
 
   @Get('opd-queue')
   getOpdQueue() { return this.receptionistService.getOpdQueue(); }
