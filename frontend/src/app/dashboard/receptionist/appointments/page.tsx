@@ -20,9 +20,29 @@ export default function AppointmentsPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [eligibleDoctors, setEligibleDoctors] = useState<any[]>([]);
+  const [patients, setPatients] = useState<any[]>([]);
 
-  const load = () => api.get('/receptionist/appointments').then(r => setAppointments(r.data));
+  const load = () => {
+    api.get('/receptionist/appointments').then(r => setAppointments(r.data));
+    api.get('/patients').then(r => setPatients(r.data || [])).catch(() => {});
+  };
   useEffect(() => { load(); }, []);
+
+  const handlePatientSelect = (selectedId: string) => {
+    const p = patients.find(pat => pat.patientId === selectedId || pat.id === selectedId);
+    if (p) {
+      setForm(f => ({
+        ...f,
+        patientId: p.patientId,
+        patientName: `${p.firstName} ${p.lastName}`,
+        department: p.department || f.department,
+        doctorId: p.assignedDoctorId || f.doctorId,
+        doctorName: p.assignedDoctorName || f.doctorName,
+      }));
+    } else {
+      set('patientId', selectedId);
+    }
+  };
 
   useEffect(() => {
     const url = form.department ? `/users/doctors?department=${encodeURIComponent(form.department)}` : '/users/doctors';
@@ -126,6 +146,21 @@ export default function AppointmentsPage() {
             <form onSubmit={handleSubmit}>
               <div className="modal-body">
                 <div className="form-grid form-grid-2">
+                  <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                    <label className="form-label">Select Registered Patient (Auto-fills details)</label>
+                    <select
+                      className="form-control"
+                      value={form.patientId}
+                      onChange={e => handlePatientSelect(e.target.value)}
+                    >
+                      <option value="">-- Choose Existing Patient or Enter Details Below --</option>
+                      {patients.map(p => (
+                        <option key={p.patientId} value={p.patientId}>
+                          {p.firstName} {p.lastName} ({p.patientId}) {p.department ? `• ${p.department}` : ''} {p.assignedDoctorName ? `• Dr. ${p.assignedDoctorName}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <div className="form-group">
                     <label className="form-label">Patient Name *</label>
                     <input className="form-control" placeholder="Full name" value={form.patientName} onChange={e => set('patientName', e.target.value)} required />

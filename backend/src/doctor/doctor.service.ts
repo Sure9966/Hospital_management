@@ -8,6 +8,11 @@ import { Prescription } from '../pharmacy/prescription.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { Appointment } from '../receptionist/appointment.entity';
 import { DischargeSummary } from './discharge-summary.entity';
+function isUuid(val?: string): boolean {
+  if (!val) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
+}
+
 @Injectable()
 export class DoctorService {
   constructor(
@@ -25,6 +30,15 @@ export class DoctorService {
     @InjectRepository(Appointment)
     private appointmentRepo: Repository<Appointment>,
   ) { }
+
+  private async findPatientSafely(identifier?: string): Promise<Patient | null> {
+    if (!identifier) return null;
+    let patient = await this.patientRepo.findOne({ where: { patientId: identifier } });
+    if (!patient && isUuid(identifier)) {
+      patient = await this.patientRepo.findOne({ where: { id: identifier } });
+    }
+    return patient;
+  }
   async createConsultation(data: Partial<DoctorConsultation>, doctorUser?: any) {
     const formattedDoctorName = doctorUser
       ? (doctorUser.firstName?.startsWith('Dr.')
@@ -84,9 +98,7 @@ export class DoctorService {
 
   async findConsultationsByPatient(patientId: string, user?: any) {
     if (user?.role === 'doctor') {
-      const patient = await this.patientRepo.findOne({
-        where: [{ patientId }, { id: patientId }],
-      });
+      const patient = await this.findPatientSafely(patientId);
       if (patient) {
         const isAssigned =
           patient.assignedDoctorId === user.id ||
@@ -118,10 +130,7 @@ export class DoctorService {
   }
 
   async getPatientFullEhr(patientIdentifier: string, user?: any) {
-    let patient = await this.patientRepo.findOne({ where: { patientId: patientIdentifier } });
-    if (!patient) {
-      patient = await this.patientRepo.findOne({ where: { id: patientIdentifier } });
-    }
+    const patient = await this.findPatientSafely(patientIdentifier);
 
     if (!patient) {
       throw new NotFoundException('Patient record not found');
@@ -222,10 +231,7 @@ export class DoctorService {
   }
 
   async assignDoctorToPatient(patientId: string, doctorName: string, doctorId?: string) {
-    let patient = await this.patientRepo.findOne({ where: { patientId } });
-    if (!patient) {
-      patient = await this.patientRepo.findOne({ where: { id: patientId } });
-    }
+    const patient = await this.findPatientSafely(patientId);
     if (!patient) {
       throw new NotFoundException('Patient record not found');
     }
@@ -287,15 +293,7 @@ export class DoctorService {
     data: any,
     doctorUser: any,
   ) {
-    let patient = await this.patientRepo.findOne({
-      where: { patientId: patientIdentifier },
-    });
-
-    if (!patient) {
-      patient = await this.patientRepo.findOne({
-        where: { id: patientIdentifier },
-      });
-    }
+    const patient = await this.findPatientSafely(patientIdentifier);
 
     if (!patient) {
       throw new NotFoundException('Patient record not found');

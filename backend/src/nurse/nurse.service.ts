@@ -6,6 +6,11 @@ import { Patient } from '../patients/patient.entity';
 import { Prescription } from '../pharmacy/prescription.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 
+function isUuid(val?: string): boolean {
+  if (!val) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
+}
+
 @Injectable()
 export class NurseService {
   constructor(
@@ -17,6 +22,15 @@ export class NurseService {
     private prescriptionRepo: Repository<Prescription>,
     private notificationsService: NotificationsService,
   ) {}
+
+  private async findPatientSafely(identifier?: string): Promise<Patient | null> {
+    if (!identifier) return null;
+    let patient = await this.patientRepo.findOne({ where: { patientId: identifier } });
+    if (!patient && isUuid(identifier)) {
+      patient = await this.patientRepo.findOne({ where: { id: identifier } });
+    }
+    return patient;
+  }
 
   async recordVitals(data: Partial<Vital>, recordedById?: string) {
     const vital = this.vitalRepo.create(data);
@@ -73,9 +87,7 @@ export class NurseService {
 
   async findVitalsByPatient(patientId: string, user?: any) {
     if (user?.role === 'doctor') {
-      const patient = await this.patientRepo.findOne({
-        where: [{ patientId }, { id: patientId }],
-      });
+      const patient = await this.findPatientSafely(patientId);
       if (patient) {
         const isAssigned =
           patient.assignedDoctorId === user.id ||
@@ -105,10 +117,7 @@ export class NurseService {
   }
 
   async getPatientFullMedicalHistory(patientIdentifier: string, user?: any) {
-    let patient = await this.patientRepo.findOne({ where: { patientId: patientIdentifier } });
-    if (!patient) {
-      patient = await this.patientRepo.findOne({ where: { id: patientIdentifier } });
-    }
+    const patient = await this.findPatientSafely(patientIdentifier);
 
     if (!patient) {
       throw new NotFoundException('Patient record not found');

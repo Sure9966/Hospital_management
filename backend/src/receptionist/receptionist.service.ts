@@ -5,6 +5,11 @@ import { Appointment } from './appointment.entity';
 import { Patient } from '../patients/patient.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 
+function isUuid(val?: string): boolean {
+  if (!val) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
+}
+
 @Injectable()
 export class ReceptionistService {
   constructor(
@@ -15,16 +20,22 @@ export class ReceptionistService {
     private notificationsService: NotificationsService,
   ) {}
 
+  private async findPatientSafely(identifier?: string): Promise<Patient | null> {
+    if (!identifier) return null;
+    let patient = await this.patientRepo.findOne({ where: { patientId: identifier } });
+    if (!patient && isUuid(identifier)) {
+      patient = await this.patientRepo.findOne({ where: { id: identifier } });
+    }
+    return patient;
+  }
+
   async createAppointment(data: Partial<Appointment>, createdById?: string) {
     const appointment = this.appointmentRepo.create(data);
     const saved = await this.appointmentRepo.save(appointment);
 
     // Sync patient assigned doctor if patientId is present
     if (saved.patientId) {
-      let patient = await this.patientRepo.findOne({ where: { patientId: saved.patientId } });
-      if (!patient) {
-        patient = await this.patientRepo.findOne({ where: { id: saved.patientId } });
-      }
+      const patient = await this.findPatientSafely(saved.patientId);
       if (patient) {
         if (saved.doctorId) patient.assignedDoctorId = saved.doctorId;
         if (saved.doctorName) patient.assignedDoctorName = saved.doctorName;
@@ -80,10 +91,7 @@ export class ReceptionistService {
     const updated = await this.findAppointmentById(id);
 
     if (updated && updated.patientId && (data.doctorId || data.doctorName)) {
-      let patient = await this.patientRepo.findOne({ where: { patientId: updated.patientId } });
-      if (!patient) {
-        patient = await this.patientRepo.findOne({ where: { id: updated.patientId } });
-      }
+      const patient = await this.findPatientSafely(updated.patientId);
       if (patient) {
         if (updated.doctorId) patient.assignedDoctorId = updated.doctorId;
         if (updated.doctorName) patient.assignedDoctorName = updated.doctorName;

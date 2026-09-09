@@ -4,6 +4,11 @@ import { Repository } from 'typeorm';
 import { Patient } from './patient.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 
+function isUuid(val?: string): boolean {
+  if (!val) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
+}
+
 @Injectable()
 export class PatientsService {
   constructor(
@@ -93,7 +98,10 @@ export class PatientsService {
   }
 
   async findOne(id: string, user?: any) {
-    let patient = await this.patientRepo.findOne({ where: { id } });
+    let patient: Patient | null = null;
+    if (isUuid(id)) {
+      patient = await this.patientRepo.findOne({ where: { id } });
+    }
     if (!patient) {
       patient = await this.patientRepo.findOne({ where: { patientId: id } });
     }
@@ -127,15 +135,25 @@ export class PatientsService {
   }
 
   async update(id: string, data: Partial<Patient>, user?: any) {
-    if (user?.role === 'doctor') {
-      await this.findOne(id, user);
+    const existing = await this.findOne(id, user);
+    if (!existing) {
+      throw new NotFoundException('Patient not found');
     }
-    await this.patientRepo.update(id, data);
-    return this.findOne(id, user);
+    await this.patientRepo.update(existing.id, data);
+    return this.findOne(existing.id, user);
   }
 
   async remove(id: string) {
-    await this.patientRepo.delete(id);
+    let patient: Patient | null = null;
+    if (isUuid(id)) {
+      patient = await this.patientRepo.findOne({ where: { id } });
+    }
+    if (!patient) {
+      patient = await this.patientRepo.findOne({ where: { patientId: id } });
+    }
+    if (patient) {
+      await this.patientRepo.delete(patient.id);
+    }
     return { success: true };
   }
 
