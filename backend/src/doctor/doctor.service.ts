@@ -82,12 +82,12 @@ export class DoctorService {
       const qb = this.consultationRepo.createQueryBuilder('c');
       const doctorNameTerm = user.lastName ? `%${user.lastName}%` : '';
       qb.where(
-        '(c.doctorId = :doctorId OR c.patientId IN (SELECT p.patientId FROM patients p WHERE p.assignedDoctorId = :doctorId))',
+        '(c."doctorId" = :doctorId OR c."patientId" IN (SELECT p."patientId" FROM patients p WHERE p."assignedDoctorId" = :doctorId))',
         { doctorId: user.id },
       );
       if (doctorNameTerm) {
         qb.orWhere(
-          '(c.patientId IN (SELECT p.patientId FROM patients p WHERE p.assignedDoctorId IS NULL AND (p.assignedDoctorName ILIKE :docName OR p.admittedBy ILIKE :docName)))',
+          '(c."patientId" IN (SELECT p."patientId" FROM patients p WHERE p."assignedDoctorId" IS NULL AND (p."assignedDoctorName" ILIKE :docName OR p."admittedBy" ILIKE :docName)))',
           { docName: doctorNameTerm },
         );
       }
@@ -373,7 +373,7 @@ export class DoctorService {
       .set({
         status: ConsultationStatus.DISCHARGED,
       })
-      .where('patientId = :patientId', {
+      .where('"patientId" = :patientId', {
         patientId: patient.patientId,
       })
       .andWhere('status != :completed', {

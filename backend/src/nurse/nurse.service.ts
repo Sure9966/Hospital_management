@@ -71,12 +71,12 @@ export class NurseService {
       const qb = this.vitalRepo.createQueryBuilder('v');
       const doctorNameTerm = user.lastName ? `%${user.lastName}%` : '';
       qb.where(
-        'v.patientId IN (SELECT p.patientId FROM patients p WHERE p.assignedDoctorId = :doctorId)',
+        'v."patientId" IN (SELECT p."patientId" FROM patients p WHERE p."assignedDoctorId" = :doctorId)',
         { doctorId: user.id },
       );
       if (doctorNameTerm) {
         qb.orWhere(
-          'v.patientId IN (SELECT p.patientId FROM patients p WHERE p.assignedDoctorId IS NULL AND (p.assignedDoctorName ILIKE :docName OR p.admittedBy ILIKE :docName))',
+          'v."patientId" IN (SELECT p."patientId" FROM patients p WHERE p."assignedDoctorId" IS NULL AND (p."assignedDoctorName" ILIKE :docName OR p."admittedBy" ILIKE :docName))',
           { docName: doctorNameTerm },
         );
       }
