@@ -344,7 +344,7 @@ export class DoctorService {
 
       // Logo (top-right) — replace with real file if you have it
       doc.image('assets/logo.png', PAGE_RIGHT - 55, 25, { width: 50 });
-
+      doc.image('assets/logo1.png', PAGE_LEFT - 55, 25, { width: 50 });
       // ─── Title bar ──────────────────────────────────────────────────
       const titleY = 80;
       doc.rect(PAGE_LEFT, titleY, PAGE_WIDTH, 20).fill('#1e3a8a');
