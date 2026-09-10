@@ -21,7 +21,7 @@ export class PatientsService {
     const count = await this.patientRepo.count();
     const year = new Date().getFullYear();
     const seq = String(count + 1).padStart(4, '0');
-    const patientId = `PAT-${year}-${seq}`;
+    const patientId = data.patientId || `PAT-${year}-${seq}`;
     const opdTokenNumber = `TK-${year}-${seq}`;
 
     const patient = this.patientRepo.create({

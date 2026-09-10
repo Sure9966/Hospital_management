@@ -26,14 +26,14 @@ export class NotificationsController {
     return this.notificationsService.findAll(user.id, user.role);
   }
 
-  @Patch(':id/read')
-  markAsRead(@Param('id') id: string) {
-    return this.notificationsService.markAsRead(id);
-  }
-
   @Patch('read-all')
   markAllRead(@CurrentUser() user: any) {
     return this.notificationsService.markAllRead(user.id);
+  }
+
+  @Patch(':id/read')
+  markAsRead(@Param('id') id: string) {
+    return this.notificationsService.markAsRead(id);
   }
 
   @Get('queue/status')

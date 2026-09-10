@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Prescription, PrescriptionStatus, BillingStatus } from './prescription.entity';
@@ -8,6 +8,7 @@ import * as PDFDocument from 'pdfkit';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import { Patient } from '../patients/patient.entity';
 
 @Injectable()
 export class PharmacyService {
@@ -16,6 +17,8 @@ export class PharmacyService {
   constructor(
     @InjectRepository(Prescription)
     private prescriptionRepo: Repository<Prescription>,
+    @InjectRepository(Patient)
+    private patientRepo: Repository<Patient>,
     private notificationsService: NotificationsService,
   ) {
     if (!fs.existsSync(this.storageDir)) {
@@ -23,6 +26,81 @@ export class PharmacyService {
     }
   }
 
+  // private async validatePatient(patientId: string, patientName: string) {
+  //   const patient = await this.patientRepo.findOne({ 
+  //     where: { patientId } 
+  //   });
+
+  //   if (!patient) {
+  //     throw new BadRequestException(`Patient with ID ${patientId} not found in database`);
+  //   }
+
+  //   const expectedName = `${patient.firstName} ${patient.lastName}`;
+  //   if (patientName.trim().toLowerCase() !== expectedName.toLowerCase()) {
+  //     throw new BadRequestException(`Patient name does not match. Expected: ${expectedName}, Provided: ${patientName}`);
+  //   }
+
+  //   return patient;
+  // }
+
+  private async validatePatient(patientId: string, patientName: string) {
+    const normalizedId = (patientId || '').trim();
+    const normalizedName = (patientName || '').trim();
+
+    if (!normalizedId) {
+      throw new BadRequestException('patientId is required');
+    }
+
+    // 1. Exact match on patientId column
+    let patient = await this.patientRepo.findOne({
+      where: { patientId: normalizedId },
+    });
+
+    // 2. Fallback: treat as UUID primary key
+    const isUuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        normalizedId,
+      );
+    if (!patient && isUuid) {
+      patient = await this.patientRepo.findOne({ where: { id: normalizedId } });
+    }
+
+    // 3. Fallback: case-insensitive match
+    if (!patient) {
+      patient = await this.patientRepo
+        .createQueryBuilder('p')
+        .where('LOWER(p.patientId) = LOWER(:id)', { id: normalizedId })
+        .getOne();
+    }
+
+    if (!patient) {
+      // Debug: show what actually exists in DB
+      const samples = await this.patientRepo.find({ take: 20 });
+      console.error('❌ Patient lookup failed for:', JSON.stringify(normalizedId));
+      console.error(
+        '📋 Sample DB patients:',
+        samples.map((p) => ({
+          id: p.id,
+          patientId: p.patientId,
+          name: `${p.firstName} ${p.lastName}`,
+        })),
+      );
+
+      throw new BadRequestException(
+        `Patient with ID ${normalizedId} not found in database`,
+      );
+    }
+
+    // 4. Name match (case-insensitive, trimmed)
+    const expectedName = `${patient.firstName} ${patient.lastName}`.trim();
+    if (normalizedName.toLowerCase() !== expectedName.toLowerCase()) {
+      throw new BadRequestException(
+        `Patient name does not match. Expected: ${expectedName}, Provided: ${normalizedName}`,
+      );
+    }
+
+    return patient;
+  }
   private calculateTotals(medicines: any[], discountAmount: number = 0, taxAmount: number = 0) {
     const processedMedicines = (medicines || []).map((m) => {
       const quantity = Math.max(1, Number(m.quantity) || 1);
@@ -47,6 +125,14 @@ export class PharmacyService {
   }
 
   async createPrescription(data: CreatePrescriptionDto, createdById?: string) {
+    // Validate patient exists in database
+    await this.validatePatient(data.patientId, data.patientName);
+
+    // Validate medicines array
+    if (!data.medicines || !Array.isArray(data.medicines) || data.medicines.length === 0) {
+      throw new BadRequestException('medicines must be a non-empty array');
+    }
+
     const count = await this.prescriptionRepo.count();
     const year = new Date().getFullYear();
     const prescriptionId = `RX-${year}-${String(count + 1).padStart(4, '0')}`;
@@ -204,7 +290,7 @@ export class PharmacyService {
 
       // Patient & Doctor Information
       doc.fontSize(11).font('Helvetica-Bold').fillColor('#0f172a').text('PATIENT & DOCTOR INFORMATION', 40, 140);
-      
+
       doc.fontSize(9).font('Helvetica').fillColor('#475569');
       doc.text(`Patient Name: ${rx.patientName}`, 40, 158);
       doc.text(`Patient ID: ${rx.patientId}`, 40, 172);
@@ -244,7 +330,7 @@ export class PharmacyService {
       // Billing Summary Sidebar / Box
       const summaryTop = y;
       doc.rect(320, summaryTop, 235, 110).fill('#f8fafc').strokeColor('#e2e8f0').stroke();
-      
+
       doc.fillColor('#334155').fontSize(9).font('Helvetica');
       doc.text('Subtotal:', 335, summaryTop + 12);
       doc.text(`$${Number(rx.subtotal || 0).toFixed(2)}`, 470, summaryTop + 12, { width: 75, align: 'right' });
@@ -264,10 +350,10 @@ export class PharmacyService {
       // Billing & Dispense Status Badges
       doc.fontSize(9).font('Helvetica-Bold');
       doc.fillColor('#0284c7').text(`Dispense Status: ${rx.status.toUpperCase()}`, 40, summaryTop + 12);
-      
+
       const billingColor = rx.billingStatus === BillingStatus.PAID ? '#16a34a' : rx.billingStatus === BillingStatus.BILLED ? '#0284c7' : '#d97706';
       doc.fillColor(billingColor).text(`Billing Status: ${rx.billingStatus.toUpperCase()}`, 40, summaryTop + 30);
-      
+
       if (rx.dispensedBy) {
         doc.fillColor('#64748b').font('Helvetica').text(`Dispensed By: ${rx.dispensedBy}`, 40, summaryTop + 48);
       }

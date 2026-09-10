@@ -133,7 +133,7 @@ export function useSocket() {
         const token = getToken();
         if (!token) return;
 
-        const response = await fetch('http://localhost:3001/notifications', {
+        const response = await fetch('http://localhost:3001/api/notifications', {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',

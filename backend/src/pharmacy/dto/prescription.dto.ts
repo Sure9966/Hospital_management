@@ -7,6 +7,7 @@ import {
   IsNumber,
   Min,
   IsEnum,
+  ArrayMinSize,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { BillingStatus, PrescriptionStatus } from '../prescription.entity';
@@ -67,7 +68,7 @@ export class CreatePrescriptionDto {
   @IsOptional()
   notes?: string;
 
-  @IsArray()
+  @IsArray({ message: 'medicines must be an array' })
   @ValidateNested({ each: true })
   @Type(() => MedicineItemDto)
   medicines: MedicineItemDto[];

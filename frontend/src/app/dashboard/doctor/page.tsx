@@ -93,8 +93,8 @@ export default function DoctorDashboard() {
   // Resolve Doctor Name and Doctor ID
   const doctorFullName = currentUser
     ? (currentUser.firstName?.startsWith('Dr.')
-        ? `${currentUser.firstName} ${currentUser.lastName}`
-        : `Dr. ${currentUser.firstName} ${currentUser.lastName}`)
+      ? `${currentUser.firstName} ${currentUser.lastName}`
+      : `Dr. ${currentUser.firstName} ${currentUser.lastName}`)
     : 'Doctor';
   const doctorId = currentUser?.id || '';
 
@@ -263,20 +263,78 @@ export default function DoctorDashboard() {
     }
   };
 
+  // const handleSavePrescription = async (e: React.FormEvent) => {
+  //   e.preventDefault();
+  //   setSavingPrescription(true);
+  //   try {
+  //     // Map frontend items (medicineName/unitPrice) → backend medicines (name/unitCost)
+  //     const medicines = prescriptionForm.items.map(i => ({
+  //       name: i.medicineName,
+  //       dosage: i.dosage,
+  //       duration: i.duration,
+  //       quantity: Number(i.quantity),
+  //       unitCost: Number(i.unitPrice),
+  //       lineTotal: Number(i.quantity) * Number(i.unitPrice),
+  //     }));
+  //     await api.post('/pharmacy/prescriptions', {
+  //       patientId: prescriptionForm.patientId,
+  //       patientName: prescriptionForm.patientName,
+  //       doctorName: prescriptionForm.doctorName,
+  //       notes: prescriptionForm.notes,
+  //       medicines,
+  //     });
+  //     toast.success('💊 Prescription created and sent to Pharmacy!');
+  //     setShowPrescriptionModal(false);
+  //     loadData();
+  //   } catch (err: any) {
+  //     toast.error(err.response?.data?.message || 'Error creating prescription');
+  //   } finally {
+  //     setSavingPrescription(false);
+  //   }
+  // };
   const handleSavePrescription = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // ✅ Validate items first
+    const validItems = prescriptionForm.items.filter(
+      i => i.medicineName && i.medicineName.trim() !== ''
+    );
+
+    if (validItems.length === 0) {
+      toast.error('Please add at least one medicine with a name.');
+      return;
+    }
+
+    // ✅ Sanitize numbers (avoid NaN)
+    const medicines = validItems.map(i => ({
+      name: i.medicineName.trim(),
+      dosage: i.dosage?.trim() || 'As directed',
+      duration: i.duration?.trim() || '5 days',
+      quantity: Number(i.quantity) || 0,
+      unitCost: Number(i.unitPrice) || 0,
+    }));
+
     setSavingPrescription(true);
     try {
-      const totalAmount = prescriptionForm.items.reduce((sum, i) => sum + (Number(i.quantity) * Number(i.unitPrice)), 0);
       await api.post('/pharmacy/prescriptions', {
-        ...prescriptionForm,
-        totalAmount,
+        patientId: prescriptionForm.patientId.trim(),
+        patientName: prescriptionForm.patientName.trim(),
+        doctorName: prescriptionForm.doctorName,
+        notes: prescriptionForm.notes,
+        medicines, // ✅ always a non-empty array of valid objects
       });
+
       toast.success('💊 Prescription created and sent to Pharmacy!');
       setShowPrescriptionModal(false);
       loadData();
     } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Error creating prescription');
+      // 🔎 Log the full backend error so you can see exactly which field failed
+      console.error('Prescription error:', err.response?.data);
+      toast.error(
+        err.response?.data?.message ||
+        err.response?.data?.errors?.[0]?.message ||
+        'Error creating prescription'
+      );
     } finally {
       setSavingPrescription(false);
     }
