@@ -8,6 +8,10 @@ import { Prescription } from '../pharmacy/prescription.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { Appointment } from '../receptionist/appointment.entity';
 import { DischargeSummary } from './discharge-summary.entity';
+import * as PDFDocument from 'pdfkit';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as crypto from 'crypto';
 function isUuid(val?: string): boolean {
   if (!val) return false;
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
@@ -15,6 +19,8 @@ function isUuid(val?: string): boolean {
 
 @Injectable()
 export class DoctorService {
+  private readonly storageDir = path.join(process.cwd(), 'secure_storage', 'discharges');
+
   constructor(
     @InjectRepository(DischargeSummary)
     private dischargeRepo: Repository<DischargeSummary>,
@@ -29,7 +35,11 @@ export class DoctorService {
     private notificationsService: NotificationsService,
     @InjectRepository(Appointment)
     private appointmentRepo: Repository<Appointment>,
-  ) { }
+  ) {
+    if (!fs.existsSync(this.storageDir)) {
+      fs.mkdirSync(this.storageDir, { recursive: true });
+    }
+  }
 
   private async findPatientSafely(identifier?: string): Promise<Patient | null> {
     if (!identifier) return null;
@@ -42,8 +52,8 @@ export class DoctorService {
   async createConsultation(data: Partial<DoctorConsultation>, doctorUser?: any) {
     const formattedDoctorName = doctorUser
       ? (doctorUser.firstName?.startsWith('Dr.')
-          ? `${doctorUser.firstName} ${doctorUser.lastName}`
-          : `Dr. ${doctorUser.firstName} ${doctorUser.lastName}`)
+        ? `${doctorUser.firstName} ${doctorUser.lastName}`
+        : `Dr. ${doctorUser.firstName} ${doctorUser.lastName}`)
       : 'Doctor';
 
     const consultation = this.consultationRepo.create({
@@ -288,6 +298,274 @@ export class DoctorService {
       .getMany();
   }
 
+  private async generateDischargePdf(
+    discharge: DischargeSummary,
+    patient: Patient,
+  ): Promise<void> {
+    const pdfKey = `discharges/${discharge.patientId}_${Date.now()}.pdf`;
+    const fullPath = path.join(this.storageDir, `${discharge.patientId}_discharge.pdf`);
+
+    return new Promise((resolve, reject) => {
+      const doc = new PDFDocument({ margin: 30, size: 'A4' });
+      const stream = fs.createWriteStream(fullPath);
+      doc.pipe(stream);
+
+      // ─── Page geometry ──────────────────────────────────────────────
+      const PAGE_LEFT = 30;
+      const PAGE_RIGHT = 565;
+      const PAGE_WIDTH = PAGE_RIGHT - PAGE_LEFT;          // 535
+      const LABEL_W = 105;                                 // label column
+      const VALUE_W = (PAGE_WIDTH / 2) - LABEL_W;          // each half cell
+
+      // ─── Hospital header ────────────────────────────────────────────
+      doc
+        .fillColor('#0f172a')
+        .fontSize(16)
+        .font('Helvetica-Bold')
+        .text('NEUROSTAR MULTISPECIALITY HOSPITAL', PAGE_LEFT, 30, {
+          width: PAGE_WIDTH,
+          align: 'center',
+        });
+
+      doc
+        .fontSize(8)
+        .font('Helvetica')
+        .fillColor('#475569')
+        .text(
+          '67-19-1, Opp Ashram School, Nagamalli thota, Kakinada 533003, India',
+          PAGE_LEFT,
+          50,
+          { width: PAGE_WIDTH, align: 'center' },
+        )
+        .text('Phone: 7396333335 | Email: neurostarhospital@gmail.com', {
+          width: PAGE_WIDTH,
+          align: 'center',
+        });
+
+      // Logo (top-right) — replace with real file if you have it
+      doc.image('assets/logo.png', PAGE_RIGHT - 55, 25, { width: 50 });
+
+      // ─── Title bar ──────────────────────────────────────────────────
+      const titleY = 80;
+      doc.rect(PAGE_LEFT, titleY, PAGE_WIDTH, 20).fill('#1e3a8a');
+      doc
+        .fillColor('#ffffff')
+        .fontSize(11)
+        .font('Helvetica-Bold')
+        .text('DISCHARGE SUMMARY', PAGE_LEFT, titleY + 5, {
+          width: PAGE_WIDTH,
+          align: 'center',
+        });
+
+      // ─── Patient info grid (2 columns x N rows) ─────────────────────
+      let y = titleY + 25;
+      const rowH = 16;
+
+      const drawRow = (
+        leftLabel: string, leftValue: string,
+        rightLabel: string, rightValue: string,
+      ) => {
+        // left cell
+        doc.rect(PAGE_LEFT, y, LABEL_W + VALUE_W, rowH).stroke('#94a3b8');
+        doc.rect(PAGE_LEFT + LABEL_W + VALUE_W, y, LABEL_W + VALUE_W, rowH).stroke('#94a3b8');
+        doc.rect(PAGE_LEFT + LABEL_W, y, VALUE_W, rowH).stroke('#94a3b8');
+        doc.rect(PAGE_LEFT + LABEL_W + VALUE_W + LABEL_W, y, VALUE_W, rowH).stroke('#94a3b8');
+
+        // vertical divider between halves
+        doc.moveTo(PAGE_LEFT + LABEL_W + VALUE_W, y).lineTo(PAGE_LEFT + LABEL_W + VALUE_W, y + rowH).stroke('#94a3b8');
+
+        doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(9);
+        doc.text(leftLabel, PAGE_LEFT + 4, y + 4, { width: LABEL_W - 6 });
+        doc.text(rightLabel, PAGE_LEFT + LABEL_W + VALUE_W + 4, y + 4, { width: LABEL_W - 6 });
+
+        doc.font('Helvetica').fillColor('#334155');
+        doc.text(leftValue, PAGE_LEFT + LABEL_W + 4, y + 4, { width: VALUE_W - 6 });
+        doc.text(rightValue, PAGE_LEFT + LABEL_W + VALUE_W + LABEL_W + 4, y + 4, { width: VALUE_W - 6 });
+
+        y += rowH;
+      };
+
+      drawRow('Patient ID', discharge.patientId, 'Patient Name', discharge.patientName);
+      drawRow('Age', (patient as any).age ? `${(patient as any).age} Yrs` : '—', 'Gender', patient.gender || '—');
+      drawRow('Admission No', (patient as any).admissionNo || '—', 'Visit Type', (patient as any).visitType || 'InPatient');
+      drawRow('Specialty', (patient as any).specialty || 'GENERAL', 'Consultant', discharge.doctorName || '—');
+      drawRow('Mobile Number', patient.phone || '—', 'Category', (patient as any).category || 'CASH');
+      drawRow('Admission Date', (patient as any).admissionDate || '—', 'Discharge Date', discharge.dischargeDate);
+
+      // ─── Hospital course / treatment (multi-line block) ─────────────
+      y += 4;
+      const blockLabelW = 140;
+      const blockValueW = PAGE_WIDTH - blockLabelW;
+
+      const drawBlock = (label: string, value: string) => {
+        const text = value || '—';
+        const textHeight = doc.heightOfString(text, { width: blockValueW - 10 });
+        const h = Math.max(20, textHeight + 12);
+
+        doc.rect(PAGE_LEFT, y, blockLabelW, h).stroke('#94a3b8');
+        doc.rect(PAGE_LEFT + blockLabelW, y, blockValueW, h).stroke('#94a3b8');
+
+        doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(9);
+        doc.text(label, PAGE_LEFT + 4, y + 6, { width: blockLabelW - 6 });
+
+        doc.font('Helvetica').fillColor('#1e293b').fontSize(9);
+        doc.text(text, PAGE_LEFT + blockLabelW + 6, y + 5, {
+          width: blockValueW - 12,
+          align: 'left',
+          lineGap: 2,
+        });
+
+        y += h;
+      };
+
+      drawBlock(
+        'Hospital course/Treatment Given',
+        discharge.dischargeSummary ||
+        'Patient admitted and treated. Clinical course uneventful. Discharged in stable condition.',
+      );
+
+      // ─── Key Test Results section ───────────────────────────────────
+      y += 6;
+      doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(10);
+      doc.text('Key Test Results', PAGE_LEFT, y);
+      y += 14;
+
+      // Lab Results row
+      doc.rect(PAGE_LEFT, y, blockLabelW, 18).stroke('#94a3b8');
+      doc.rect(PAGE_LEFT + blockLabelW, y, blockValueW, 18).stroke('#94a3b8');
+      doc.font('Helvetica-Bold').fillColor('#0f172a').fontSize(9);
+      doc.text('Lab Results', PAGE_LEFT + 4, y + 5);
+      doc.font('Helvetica').fillColor('#1e293b');
+      doc.text(
+        (discharge as any).labResults || 'ALL INVESTIGATIONS WERE ENCLOSED.',
+        PAGE_LEFT + blockLabelW + 6,
+        y + 5,
+        { width: blockValueW - 12 },
+      );
+      y += 18;
+
+      // Condition at Discharge row (multi-line)
+      const conditionText =
+        (discharge as any).conditionNotes ||
+        [
+          `PATIENT : ${discharge.conditionAtDischarge || 'CONSCIOUS AND COHERENT'}`,
+          'GCS : E4V5M6',
+          'ALL VITALS ARE STABLE',
+          'NEUROLOGICAL EXAMINATION : NORMAL.',
+          'OTHER SYSTEMIC EXAMINATION : NORMAL.',
+        ].join('\n');
+
+      const conditionH = Math.max(
+        60,
+        doc.heightOfString(conditionText, { width: blockValueW - 12 }) + 12,
+      );
+
+      doc.rect(PAGE_LEFT, y, blockLabelW, conditionH).stroke('#94a3b8');
+      doc.rect(PAGE_LEFT + blockLabelW, y, blockValueW, conditionH).stroke('#94a3b8');
+
+      doc.font('Helvetica-Bold').fillColor('#0f172a').fontSize(9);
+      doc.text('Condition at Discharge', PAGE_LEFT + 4, y + 6, { width: blockLabelW - 6 });
+
+      doc.font('Helvetica').fillColor('#1e293b');
+      doc.text(conditionText, PAGE_LEFT + blockLabelW + 6, y + 6, {
+        width: blockValueW - 12,
+        lineGap: 3,
+      });
+
+      y += conditionH;
+
+      // ─── Follow-up box (kept from original design) ──────────────────
+      if (discharge.followUpDate || discharge.followUpInstructions) {
+        y += 8;
+        doc.rect(PAGE_LEFT, y, PAGE_WIDTH, 34).fillAndStroke('#f0fdf4', '#10b981');
+        doc.fillColor('#065f46').font('Helvetica-Bold').fontSize(9);
+        doc.text('FOLLOW-UP INSTRUCTIONS', PAGE_LEFT + 8, y + 5);
+        doc.font('Helvetica').fontSize(9).fillColor('#047857');
+        doc.text(
+          `Follow-up Date: ${discharge.followUpDate || '—'}   |   ${discharge.followUpInstructions || ''}`,
+          PAGE_LEFT + 8,
+          y + 19,
+          { width: PAGE_WIDTH - 16 },
+        );
+        y += 34;
+      }
+
+      // ─── Signature strip ────────────────────────────────────────────
+      y += 14;
+      doc.moveTo(PAGE_LEFT, y).lineTo(PAGE_RIGHT, y).stroke('#cbd5e1');
+      y += 8;
+
+      doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(9);
+      doc.text('ATTENDING PHYSICIAN', PAGE_LEFT, y);
+      doc.text('HOSPITAL STAMP', PAGE_RIGHT - 150, y, { width: 150, align: 'right' });
+
+      doc.font('Helvetica').fillColor('#64748b').fontSize(8);
+      doc.text(`Dr. ${discharge.doctorName || '—'}`, PAGE_LEFT, y + 14);
+      doc.text(`Date: ${new Date().toLocaleDateString()}`, PAGE_LEFT, y + 26);
+      doc.text(`Patient ID: ${discharge.patientId}`, PAGE_LEFT, y + 38);
+
+      // ─── Footer ─────────────────────────────────────────────────────
+      doc
+        .fontSize(7)
+        .fillColor('#94a3b8')
+        .text(
+          'This document is electronically generated by MediCore Health System. Valid without physical signature.',
+          PAGE_LEFT,
+          800,
+          { width: PAGE_WIDTH, align: 'center' },
+        );
+
+      doc.end();
+
+      stream.on('finish', async () => {
+        try {
+          const stats = fs.statSync(fullPath);
+          const fileBuffer = fs.readFileSync(fullPath);
+          const hashSum = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+
+          await this.dischargeRepo.update(discharge.id, {
+            dischargePdfKey: pdfKey,
+            dischargePdfName: `${discharge.patientId}_discharge.pdf`,
+            dischargePdfMimeType: 'application/pdf',
+            dischargePdfSize: stats.size,
+            dischargePdfHash: hashSum,
+            dischargeGeneratedAt: new Date(),
+          });
+
+          resolve();
+        } catch (err) {
+          reject(err);
+        }
+      });
+
+      stream.on('error', (err) => reject(err));
+    });
+  }
+
+  private wrapText(doc: PDFKit.PDFDocument, text: string, maxWidth: number): string[] {
+    const words = text.split(' ');
+    const lines: string[] = [];
+    let currentLine = '';
+
+    words.forEach(word => {
+      const testLine = currentLine ? `${currentLine} ${word}` : word;
+      const testWidth = doc.widthOfString(testLine);
+
+      if (testWidth > maxWidth && currentLine) {
+        lines.push(currentLine);
+        currentLine = word;
+      } else {
+        currentLine = testLine;
+      }
+    });
+
+    if (currentLine) {
+      lines.push(currentLine);
+    }
+
+    return lines;
+  }
+
   async dischargePatient(
     patientIdentifier: string,
     data: any,
@@ -358,6 +636,9 @@ export class DoctorService {
     const savedDischarge =
       await this.dischargeRepo.save(discharge);
 
+    // Generate discharge PDF
+    await this.generateDischargePdf(savedDischarge, patient);
+
     // Update patient
     patient.status = 'discharged' as any;
 
@@ -393,10 +674,50 @@ export class DoctorService {
       idempotencyKey,
     );
 
+    // Real-time Manager notification
+    const managerIdempotencyKey = `discharge-manager-${patient.id}-${Date.now()}`;
+    await this.notificationsService.sendToRole(
+      '🏥 Patient Discharged - Management Alert',
+      `${patient.firstName} ${patient.lastName} (${patient.patientId}) has been discharged by ${doctorName}. Discharge summary and PDF have been generated.`,
+      'management',
+      'patient_discharge',
+      patient.id,
+      undefined,
+      managerIdempotencyKey,
+    );
+
     return {
       message: 'Patient discharged successfully',
       patient,
       discharge: savedDischarge,
+    };
+  }
+
+  async getAllDischargeSummaries() {
+    return this.dischargeRepo.find({ order: { createdAt: 'DESC' } });
+  }
+
+  async getDischargePdfStream(id: string) {
+    const discharge = await this.dischargeRepo.findOne({ where: { id } });
+    if (!discharge) {
+      throw new NotFoundException('Discharge summary not found');
+    }
+
+    const fullPath = path.join(this.storageDir, `${discharge.patientId}_discharge.pdf`);
+
+    if (!fs.existsSync(fullPath)) {
+      // Regenerate if missing
+      const patient = await this.findPatientSafely(discharge.patientId);
+      if (patient) {
+        await this.generateDischargePdf(discharge, patient);
+      }
+    }
+
+    return {
+      stream: fs.createReadStream(fullPath),
+      filename: `${discharge.patientId}_discharge.pdf`,
+      mimeType: 'application/pdf',
+      size: fs.statSync(fullPath).size,
     };
   }
 }

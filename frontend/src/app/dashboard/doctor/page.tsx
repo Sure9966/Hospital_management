@@ -28,6 +28,7 @@ export default function DoctorDashboard() {
   const [appointments, setAppointments] = useState<any[]>([]);
   const [consultations, setConsultations] = useState<any[]>([]);
   const [prescriptions, setPrescriptions] = useState<any[]>([]);
+  const [discharges, setDischarges] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [showDischargeModal, setShowDischargeModal] = useState(false);
@@ -46,7 +47,7 @@ export default function DoctorDashboard() {
     dietInstructions: '',
     activityInstructions: '',
   });
-  const [activeTab, setActiveTab] = useState<'queue' | 'patients' | 'consultation' | 'vitals' | 'tests' | 'prescriptions' | 'bedrequests'>('queue');
+  const [activeTab, setActiveTab] = useState<'queue' | 'patients' | 'consultation' | 'vitals' | 'tests' | 'prescriptions' | 'bedrequests' | 'discharges'>('queue');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Selected EHR Patient state
@@ -129,13 +130,15 @@ export default function DoctorDashboard() {
       api.get('/doctor/consultations'),
       api.get('/beds/admissions'),
       api.get('/pharmacy/prescriptions').catch(() => ({ data: [] })),
+      api.get('/doctor/discharges').catch(() => ({ data: [] })),
     ])
-      .then(([patRes, vitRes, apptRes, consultRes, admRes, rxRes]) => {
+      .then(([patRes, vitRes, apptRes, consultRes, admRes, rxRes, dischargeRes]) => {
         const patData = patRes.data || [];
         setPatients(patData);
         setVitals(vitRes.data || []);
         setAppointments(apptRes.data || []);
         setConsultations(consultRes.data || []);
+        setDischarges(dischargeRes.data || []);
 
         // Only show bed requests submitted for or by this doctor
         const myRequests = (admRes.data || []).filter((a: any) =>
@@ -169,7 +172,8 @@ export default function DoctorDashboard() {
       tab === 'vitals' ||
       tab === 'tests' ||
       tab === 'prescriptions' ||
-      tab === 'bedrequests'
+      tab === 'bedrequests' ||
+      tab === 'discharges'
     ) {
       setActiveTab(tab);
     } else {
@@ -402,6 +406,27 @@ export default function DoctorDashboard() {
     return `badge ${map[s] || 'badge-gray'}`;
   };
 
+  const downloadDischargePdf = async (dischargeId: string, patientId: string) => {
+    try {
+      const response = await api.get(`/doctor/discharges/${dischargeId}/pdf`, {
+        responseType: 'blob',
+      });
+      
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${patientId}_discharge.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      
+      toast.success('✅ Discharge PDF downloaded successfully');
+    } catch (error) {
+      toast.error('Failed to download discharge PDF');
+    }
+  };
+
   const filteredPatients = patients.filter(p =>
     `${p.firstName} ${p.lastName}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
     p.patientId.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -442,6 +467,7 @@ export default function DoctorDashboard() {
             { id: 'tests', label: '🧪 Test Orders & Lab Results', icon: '🔬' },
             { id: 'prescriptions', label: '💊 Prescriptions Created', icon: '📑' },
             { id: 'bedrequests', label: '🛏️ Bed Requests', icon: '🏥', badge: bedRequests.filter((r: any) => r.status === 'pending').length },
+            { id: 'discharges', label: '📋 Discharge Summaries', icon: '🏥' },
           ].map((tab: any) => (
             <button
               key={tab.id}
@@ -889,6 +915,67 @@ export default function DoctorDashboard() {
             )}
           </div>
         )}
+
+        {/* TAB 8: Discharge Summaries */}
+        {activeTab === 'discharges' && (
+          <div className="card">
+            <div className="card-header">
+              <span className="card-title">📋 Patient Discharge Summaries ({discharges.length})</span>
+            </div>
+            <div className="card-body">
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 14 }}>
+                Discharge summaries with PDF generation for discharged patients.
+              </p>
+              {discharges.length === 0 ? (
+                <div className="empty-state">
+                  <div className="empty-icon">📋</div>
+                  <h3>No discharge summaries found</h3>
+                  <p>Discharge summaries will appear here when patients are discharged.</p>
+                </div>
+              ) : (
+                <div className="table-container">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Patient Name</th>
+                        <th>Patient ID</th>
+                        <th>Discharge Date</th>
+                        <th>Condition</th>
+                        <th>Diagnosis</th>
+                        <th>Discharge PDF</th>
+                        <th>Date Created</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {discharges.map((d: any) => (
+                        <tr key={d.id}>
+                          <td><strong>{d.patientName}</strong></td>
+                          <td><code>{d.patientId}</code></td>
+                          <td>{d.dischargeDate}</td>
+                          <td><span className="badge badge-success">{d.conditionAtDischarge}</span></td>
+                          <td>{d.diagnosis || 'N/A'}</td>
+                          <td>
+                            {d.dischargePdfName ? (
+                              <button 
+                                className="btn btn-primary btn-sm"
+                                onClick={() => downloadDischargePdf(d.id, d.patientId)}
+                              >
+                                📄 Download PDF
+                              </button>
+                            ) : (
+                              <span className="text-muted text-xs">No PDF</span>
+                            )}
+                          </td>
+                          <td style={{ fontSize: 11 }}>{new Date(d.createdAt).toLocaleDateString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* MODAL 1: Add Consultation Note & Diagnosis */}
@@ -1124,7 +1211,7 @@ export default function DoctorDashboard() {
                       <div><strong>Gender:</strong> {selectedPatientEhr.patient?.gender}</div>
                       <div><strong>DOB:</strong> {selectedPatientEhr.patient?.dateOfBirth}</div>
                       <div><strong>Blood Group:</strong> {selectedPatientEhr.patient?.bloodGroup || 'N/A'}</div>
-                      <div><strong>Attending Doctor:</strong> <span style={{ color: 'var(--primary-light)', fontWeight: 700 }}>Dr. {selectedPatientEhr.patient?.admittedBy || 'Unassigned'}</span></div>
+                      <div><strong>Attending Doctor:</strong> <span style={{ color: 'var(--primary-light)', fontWeight: 700 }}>{selectedPatientEhr.patient?.admittedBy || 'Unassigned'}</span></div>
                     </div>
                   </div>
 

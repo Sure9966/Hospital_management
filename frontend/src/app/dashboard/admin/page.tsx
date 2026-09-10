@@ -34,13 +34,13 @@ interface FormErrors {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const ROLE_META: Record<RoleKey, { label: string; badge: string; color: string; bg: string; dashboard: string }> = {
-  admin: { label: 'IT Admin', badge: 'badge-purple', color: '#a78bfa', bg: 'rgba(139,92,246,0.15)', dashboard: '/dashboard/admin' },
-  receptionist: { label: 'Receptionist', badge: 'badge-info', color: '#60a5fa', bg: 'rgba(59,130,246,0.15)', dashboard: '/dashboard/receptionist' },
-  nurse: { label: 'Nurse', badge: 'badge-success', color: '#34d399', bg: 'rgba(16,185,129,0.15)', dashboard: '/dashboard/nurse' },
-  doctor: { label: 'Doctor', badge: 'badge-purple', color: '#f472b6', bg: 'rgba(236,72,153,0.15)', dashboard: '/dashboard/doctor' },
-  pharmacist: { label: 'Pharmacist', badge: 'badge-warning', color: '#fbbf24', bg: 'rgba(245,158,11,0.15)', dashboard: '/dashboard/pharmacist' },
-  management: { label: 'Management', badge: 'badge-danger', color: '#f87171', bg: 'rgba(239,68,68,0.15)', dashboard: '/dashboard/management' },
-  patient: { label: 'Patient', badge: 'badge-gray', color: '#94a3b8', bg: 'rgba(148,163,184,0.15)', dashboard: '/dashboard/patient' },
+  admin: { label: 'IT Admin', badge: 'badge-purple', color: '#a78bfa', bg: 'rgba(139,92,246,0.15)', dashboard: '' },
+  receptionist: { label: 'Receptionist', badge: 'badge-info', color: '#60a5fa', bg: 'rgba(59,130,246,0.15)', dashboard: '' },
+  nurse: { label: 'Nurse', badge: 'badge-success', color: '#34d399', bg: 'rgba(16,185,129,0.15)', dashboard: '' },
+  doctor: { label: 'Doctor', badge: 'badge-purple', color: '#f472b6', bg: 'rgba(236,72,153,0.15)', dashboard: '' },
+  pharmacist: { label: 'Pharmacist', badge: 'badge-warning', color: '#fbbf24', bg: 'rgba(245,158,11,0.15)', dashboard: '' },
+  management: { label: 'Management', badge: 'badge-danger', color: '#f87171', bg: 'rgba(239,68,68,0.15)', dashboard: '' },
+  patient: { label: 'Patient', badge: 'badge-gray', color: '#94a3b8', bg: 'rgba(148,163,184,0.15)', dashboard: '' },
 };
 
 // const DEPARTMENTS = [
@@ -467,7 +467,7 @@ export default function AdminDashboardPage() {
             >
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: ROLE_META[r].color }}>{ROLE_META[r].label}</span>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>→ {ROLE_META[r].dashboard}</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}> {ROLE_META[r].dashboard}</span>
               </div>
               <span style={{
                 minWidth: 28, height: 28, borderRadius: '50%',
@@ -578,7 +578,7 @@ export default function AdminDashboardPage() {
                   <th style={{ width: 40 }}>#</th>
                   <th>Employee</th>
                   <th>Email / Login ID</th>
-                  <th>Role → Dashboard</th>
+                  <th>Role </th>
                   <th>Department</th>
                   <th>Phone</th>
                   <th>Account Status</th>
@@ -630,7 +630,7 @@ export default function AdminDashboardPage() {
                             <span className={`badge ${meta.badge}`} style={{ alignSelf: 'flex-start' }}>
                               {meta.label}
                             </span>
-                            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>→ {meta.dashboard}</span>
+                            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}> {meta.dashboard}</span>
                           </div>
                         </td>
                         <td style={{ fontSize: 13 }}>{u.department || <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
@@ -706,7 +706,7 @@ export default function AdminDashboardPage() {
               </div>
 
               <F label="Email Address * (Login ID)" error={formErrors.email}>
-                <input type="email" className="form-control" placeholder="employee@hospital.com"
+                <input type="email" className="form-control" placeholder="employee@gmail.com"
                   value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
                   style={{ borderColor: formErrors.email ? 'var(--danger)' : undefined }} />
               </F>
@@ -764,7 +764,7 @@ export default function AdminDashboardPage() {
               </div>
 
               <F label="Phone Number *" error={formErrors.phone}>
-                <input type="tel" className="form-control" placeholder="+1 (555) 000-0000"
+                <input type="tel" className="form-control" placeholder="+99 1234567890"
                   value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}
                   style={{ borderColor: formErrors.phone ? 'var(--danger)' : undefined, background: 'var(--bg-surface)', color: 'var(--text-primary)' }} />
               </F>

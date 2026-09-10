@@ -1,7 +1,8 @@
-import { Controller, Get, Post, Put, Param, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Param, Body, UseGuards, Res, StreamableFile } from '@nestjs/common';
 import { DoctorService } from './doctor.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { Response } from 'express';
 
 @Controller('doctor')
 @UseGuards(JwtAuthGuard)
@@ -50,5 +51,23 @@ export class DoctorController {
     @CurrentUser() user: any,
   ) {
     return this.doctorService.dischargePatient(id, body, user);
+  }
+
+  @Get('discharges')
+  getAllDischarges() {
+    return this.doctorService.getAllDischargeSummaries();
+  }
+
+  @Get('discharges/:id/pdf')
+  async getDischargePdf(@Param('id') id: string, @Res() res: Response) {
+    const { stream, filename, mimeType, size } = await this.doctorService.getDischargePdfStream(id);
+    
+    res.set({
+      'Content-Type': mimeType,
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Length': size,
+    });
+    
+    stream.pipe(res);
   }
 }

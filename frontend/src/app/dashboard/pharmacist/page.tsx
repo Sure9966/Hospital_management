@@ -82,7 +82,7 @@ export default function PharmacistDashboard() {
           <div className="card-header">
             <span className="card-title">💊 Prescriptions</span>
             <div className="flex gap-2">
-              {(['pending','all'] as const).map(t => (
+              {(['pending', 'all'] as const).map(t => (
                 <button key={t} className={`btn btn-sm ${tab === t ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab(t)}>
                   {t === 'pending' ? 'Pending' : 'All'}
                 </button>
@@ -100,10 +100,10 @@ export default function PharmacistDashboard() {
                     <tr key={p.id}>
                       <td><code style={{ color: 'var(--primary-light)', fontSize: 12 }}>{p.prescriptionId}</code></td>
                       <td><strong>{p.patientName}</strong></td>
-                      <td>Dr. {p.doctorName}</td>
+                      <td>{p.doctorName}</td>
                       <td>
                         <div className="flex gap-1" style={{ flexWrap: 'wrap' }}>
-                          {p.medicines?.slice(0,2).map((m: any, i: number) => <span key={i} className="medicine-tag">💊 {m.name}</span>)}
+                          {p.medicines?.slice(0, 2).map((m: any, i: number) => <span key={i} className="medicine-tag">💊 {m.name}</span>)}
                           {p.medicines?.length > 2 && <span className="badge badge-gray">+{p.medicines.length - 2}</span>}
                         </div>
                       </td>

@@ -49,6 +49,25 @@ export class DischargeSummary {
     @Column('text', { nullable: true })
     activityInstructions: string;
 
+    // PDF metadata fields
+    @Column({ nullable: true })
+    dischargePdfKey: string;
+
+    @Column({ nullable: true })
+    dischargePdfName: string;
+
+    @Column({ nullable: true })
+    dischargePdfMimeType: string;
+
+    @Column({ nullable: true })
+    dischargePdfSize: number;
+
+    @Column({ nullable: true })
+    dischargePdfHash: string;
+
+    @Column({ nullable: true })
+    dischargeGeneratedAt: Date;
+
     @CreateDateColumn()
     createdAt: Date;
 }

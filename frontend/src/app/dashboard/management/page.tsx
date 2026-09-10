@@ -38,7 +38,7 @@ export default function ManagementDashboard() {
   };
 
   const roleColors: Record<string, string> = {
-    admin: '#6366f1', receptionist: '#0ea5e9', nurse: '#10b981',
+    admin: '#6366f1', receptionist: '#0ea5e9', nurse: '#10b981', doctor: '#f472b6',
     pharmacist: '#f59e0b', management: '#ef4444', patient: '#8b5cf6',
   };
 
