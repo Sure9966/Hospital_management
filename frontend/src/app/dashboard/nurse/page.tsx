@@ -20,7 +20,8 @@ export default function NurseDashboard() {
       tab === 'vitals' ||
       tab === 'triage' ||
       tab === 'history' ||
-      tab === 'reports'
+      tab === 'reports' ||
+      tab === 'discharges'
     ) {
       setActiveTab(tab);
     } else {
@@ -35,12 +36,15 @@ export default function NurseDashboard() {
   const [form, setForm] = useState({ ...emptyForm });
   const [loading, setLoading] = useState(false);
   const [stats, setStats] = useState<any>({});
-  const [activeTab, setActiveTab] = useState<'vitals' | 'triage' | 'history' | 'reports'>('vitals');
+  const [activeTab, setActiveTab] = useState<'vitals' | 'triage' | 'history' | 'reports' | 'discharges'>('vitals');
   const [searchQuery, setSearchQuery] = useState('');
+  const [dischargeSummaries, setDischargeSummaries] = useState<any[]>([]);
 
   const load = () => api.get('/nurse/vitals').then(r => setVitals(r.data));
+  const loadDischarges = () => api.get('/nurse/discharges').then(r => setDischargeSummaries(r.data));
   useEffect(() => {
     load();
+    loadDischarges();
     api.get('/management/dashboard').then(r => setStats(r.data));
   }, []);
 

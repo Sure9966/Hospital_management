@@ -271,102 +271,239 @@ export class PharmacyService {
     const fullPath = path.join(this.storageDir, `${rx.prescriptionId}.pdf`);
 
     return new Promise((resolve, reject) => {
-      const doc = new PDFDocument({ margin: 40, size: 'A4' });
+      const doc = new PDFDocument({ margin: 30, size: 'A4' });
       const stream = fs.createWriteStream(fullPath);
       doc.pipe(stream);
 
-      // Header Banner
-      doc.rect(40, 40, 515, 60).fill('#1e293b');
-      doc.fillColor('#ffffff').fontSize(20).font('Helvetica-Bold').text('MEDICORE HOSPITAL PHARMACY', 55, 52);
-      doc.fontSize(10).font('Helvetica').text('Official Prescription & Billing Invoice', 55, 78);
+      // ─── Page geometry ──────────────────────────────────────────────
+      const PAGE_LEFT = 30;
+      const PAGE_RIGHT = 565;
+      const PAGE_WIDTH = PAGE_RIGHT - PAGE_LEFT;           // 535
+      const LABEL_W = 110;
+      const VALUE_W = (PAGE_WIDTH / 2) - LABEL_W;
 
-      doc.fillColor('#334155');
+      // ─── Hospital header ────────────────────────────────────────────
+      doc
+        .fillColor('#0f172a')
+        .fontSize(16)
+        .font('Helvetica-Bold')
+        .text('NEUROSTAR MULTISPECIALITY HOSPITAL', PAGE_LEFT, 30, {
+          width: PAGE_WIDTH,
+          align: 'center',
+        });
 
-      // Top info boxes
-      doc.fontSize(10).font('Helvetica-Bold').text(`Invoice #: ${rx.invoiceNumber || 'INV-PENDING'}`, 40, 115);
-      doc.text(`Prescription #: ${rx.prescriptionId}`, 200, 115);
-      doc.text(`Date: ${new Date(rx.createdAt).toLocaleDateString()}`, 400, 115);
+      doc
+        .fontSize(8)
+        .font('Helvetica')
+        .fillColor('#475569')
+        .text(
+          '67-19-1, Opp Ashram School, Nagamalli thota, Kakinada 533003, India',
+          PAGE_LEFT,
+          50,
+          { width: PAGE_WIDTH, align: 'center' },
+        )
+        .text('Phone: 7396333335 | Email: neurostarhospital@gmail.com', {
+          width: PAGE_WIDTH,
+          align: 'center',
+        });
 
-      doc.moveTo(40, 130).lineTo(555, 130).strokeColor('#cbd5e1').stroke();
+      // Logo (top-right) — replace with real file if you have it
+      doc.image('assets/logo.png', PAGE_RIGHT - 55, 25, { width: 50 });
+      doc.image('assets/logo1.png', PAGE_LEFT - 55, 25, { width: 50 });
+      // ─── Title bar ──────────────────────────────────────────────────
+      const titleY = 80;
+      doc.rect(PAGE_LEFT, titleY, PAGE_WIDTH, 20).fill('#1e3a8a');
+      doc
+        .fillColor('#ffffff')
+        .fontSize(11)
+        .font('Helvetica-Bold')
+        .text('PRESCRIPTION & PHARMACY INVOICE', PAGE_LEFT, titleY + 5, {
+          width: PAGE_WIDTH,
+          align: 'center',
+        });
 
-      // Patient & Doctor Information
-      doc.fontSize(11).font('Helvetica-Bold').fillColor('#0f172a').text('PATIENT & DOCTOR INFORMATION', 40, 140);
+      // ─── Patient & Doctor info grid ─────────────────────────────────
+      let y = titleY + 25;
+      const rowH = 16;
 
-      doc.fontSize(9).font('Helvetica').fillColor('#475569');
-      doc.text(`Patient Name: ${rx.patientName}`, 40, 158);
-      doc.text(`Patient ID: ${rx.patientId}`, 40, 172);
-      doc.text(`Prescribing Doctor: Dr. ${rx.doctorName}`, 300, 158);
-      doc.text(`Diagnosis: ${rx.diagnosis || 'N/A'}`, 300, 172);
+      const drawRow = (
+        leftLabel: string, leftValue: string,
+        rightLabel: string, rightValue: string,
+      ) => {
+        // left half
+        doc.rect(PAGE_LEFT, y, LABEL_W, rowH).stroke('#94a3b8');
+        doc.rect(PAGE_LEFT + LABEL_W, y, VALUE_W, rowH).stroke('#94a3b8');
+        // right half
+        doc.rect(PAGE_LEFT + LABEL_W + VALUE_W, y, LABEL_W, rowH).stroke('#94a3b8');
+        doc.rect(PAGE_LEFT + LABEL_W + VALUE_W + LABEL_W, y, VALUE_W, rowH).stroke('#94a3b8');
 
-      doc.moveTo(40, 192).lineTo(555, 192).strokeColor('#cbd5e1').stroke();
+        doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(9);
+        doc.text(leftLabel, PAGE_LEFT + 4, y + 4, { width: LABEL_W - 6 });
+        doc.text(rightLabel, PAGE_LEFT + LABEL_W + VALUE_W + 4, y + 4, { width: LABEL_W - 6 });
 
-      // Medicine Table Header
-      let y = 205;
-      doc.rect(40, y, 515, 22).fill('#f1f5f9');
-      doc.fillColor('#1e293b').fontSize(9).font('Helvetica-Bold');
-      doc.text('#', 45, y + 6);
-      doc.text('Medicine & Schedule', 65, y + 6);
-      doc.text('Qty', 270, y + 6);
-      doc.text('Unit Cost', 330, y + 6);
-      doc.text('Line Total', 470, y + 6, { width: 80, align: 'right' });
+        doc.font('Helvetica').fillColor('#334155');
+        doc.text(leftValue, PAGE_LEFT + LABEL_W + 4, y + 4, { width: VALUE_W - 6 });
+        doc.text(rightValue, PAGE_LEFT + LABEL_W + VALUE_W + LABEL_W + 4, y + 4, { width: VALUE_W - 6 });
 
-      y += 26;
-      doc.font('Helvetica').fontSize(9).fillColor('#334155');
+        y += rowH;
+      };
+
+      drawRow('Invoice No', rx.invoiceNumber || 'INV-PENDING', 'Prescription No', rx.prescriptionId);
+      drawRow('Patient Name', rx.patientName, 'Patient ID', rx.patientId);
+      drawRow('Prescribing Doctor', `Dr. ${rx.doctorName || '—'}`, 'Date', new Date(rx.createdAt).toLocaleDateString());
+      drawRow('Diagnosis', rx.diagnosis || 'N/A', 'Billing Status', (rx.billingStatus || 'unbilled').toUpperCase());
+
+      // ─── Medicines table ────────────────────────────────────────────
+      y += 6;
+      doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(10);
+      doc.text('PRESCRIBED MEDICINES', PAGE_LEFT, y);
+      y += 14;
+
+      const COL_NUM = PAGE_LEFT;
+      const COL_NAME = PAGE_LEFT + 24;
+      const COL_QTY = PAGE_LEFT + 300;
+      const COL_UNIT = PAGE_LEFT + 350;
+      const COL_TOTAL = PAGE_LEFT + 445;
+      const ROW_H = 20;
+
+      // header row
+      doc.rect(PAGE_LEFT, y, PAGE_WIDTH, ROW_H).fill('#e2e8f0').stroke('#94a3b8');
+      doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(9);
+      doc.text('#', COL_NUM + 4, y + 6, { width: 20 });
+      doc.text('Medicine & Schedule', COL_NAME, y + 6, { width: 270 });
+      doc.text('Qty', COL_QTY, y + 6, { width: 40, align: 'center' });
+      doc.text('Unit Cost', COL_UNIT, y + 6, { width: 80, align: 'right' });
+      doc.text('Line Total', COL_TOTAL, y + 6, { width: 90, align: 'right' });
+
+      // vertical column dividers
+      const drawColumnLines = (rowY: number, h: number) => {
+        [COL_NAME - 2, COL_QTY - 2, COL_UNIT - 2, COL_TOTAL - 2].forEach(x => {
+          doc.moveTo(x, rowY).lineTo(x, rowY + h).stroke('#cbd5e1');
+        });
+        doc.moveTo(PAGE_RIGHT, rowY).lineTo(PAGE_RIGHT, rowY + h).stroke('#cbd5e1');
+      };
+      drawColumnLines(y, ROW_H);
+
+      y += ROW_H;
 
       (rx.medicines || []).forEach((m, idx) => {
-        doc.text(`${idx + 1}`, 45, y);
-        doc.font('Helvetica-Bold').text(`${m.name} (${m.dosage})`, 65, y);
-        doc.font('Helvetica').fillColor('#64748b').text(`${m.frequency || ''} - ${m.duration || ''}`, 65, y + 11);
-        doc.fillColor('#334155');
+        const nameText = `${m.name}${m.dosage ? ` (${m.dosage})` : ''}`;
+        const subText = `${m.frequency || ''}${m.duration ? ` • ${m.duration}` : ''}`.trim();
 
-        doc.text(`${m.quantity}`, 270, y);
-        doc.text(`$${Number(m.unitCost || 0).toFixed(2)}`, 330, y);
-        doc.text(`$${Number(m.lineTotal || 0).toFixed(2)}`, 470, y, { width: 80, align: 'right' });
+        const nameHeight = doc.heightOfString(nameText, { width: 270 });
+        // Set font + size on the doc first, then measure
+        doc.font('Helvetica').fontSize(8);
+        const subHeight = subText ? doc.heightOfString(subText, { width: 270 }) + 2 : 0;
+        // const subHeight = subText ? doc.heightOfString(subText, { width: 270, fontSize: 8 }) + 2 : 0;
+        const h = Math.max(ROW_H, nameHeight + subHeight + 8);
 
-        y += 26;
-        doc.moveTo(40, y - 4).lineTo(555, y - 4).strokeColor('#f1f5f9').stroke();
+        // row box
+        doc.rect(PAGE_LEFT, y, PAGE_WIDTH, h).stroke('#e2e8f0');
+        drawColumnLines(y, h);
+
+        doc.font('Helvetica').fillColor('#334155').fontSize(9);
+        doc.text(`${idx + 1}`, COL_NUM + 4, y + 6, { width: 20 });
+
+        doc.font('Helvetica-Bold').fillColor('#0f172a');
+        doc.text(nameText, COL_NAME, y + 5, { width: 270 });
+
+        if (subText) {
+          doc.font('Helvetica').fontSize(8).fillColor('#64748b');
+          doc.text(subText, COL_NAME, y + 5 + nameHeight + 1, { width: 270 });
+        }
+
+        doc.font('Helvetica').fillColor('#334155').fontSize(9);
+        doc.text(`${m.quantity}`, COL_QTY, y + 6, { width: 40, align: 'center' });
+        doc.text(`$${Number(m.unitCost || 0).toFixed(2)}`, COL_UNIT, y + 6, { width: 80, align: 'right' });
+        doc.text(`$${Number(m.lineTotal || 0).toFixed(2)}`, COL_TOTAL, y + 6, { width: 90, align: 'right' });
+
+        y += h;
       });
 
-      y += 10;
-      // Billing Summary Sidebar / Box
-      const summaryTop = y;
-      doc.rect(320, summaryTop, 235, 110).fill('#f8fafc').strokeColor('#e2e8f0').stroke();
+      // ─── Billing summary ────────────────────────────────────────────
+      y += 12;
+      const boxW = 240;
+      const boxX = PAGE_RIGHT - boxW;
+      const boxH = 100;
+      doc.rect(boxX, y, boxW, boxH).fillAndStroke('#f8fafc', '#94a3b8');
 
-      doc.fillColor('#334155').fontSize(9).font('Helvetica');
-      doc.text('Subtotal:', 335, summaryTop + 12);
-      doc.text(`$${Number(rx.subtotal || 0).toFixed(2)}`, 470, summaryTop + 12, { width: 75, align: 'right' });
+      doc.fillColor('#334155').font('Helvetica').fontSize(9);
+      doc.text('Subtotal:', boxX + 12, y + 12);
+      doc.text(`$${Number(rx.subtotal || 0).toFixed(2)}`, boxX + boxW - 90, y + 12, { width: 78, align: 'right' });
 
-      doc.text('Discount:', 335, summaryTop + 30);
-      doc.text(`-$${Number(rx.discountAmount || 0).toFixed(2)}`, 470, summaryTop + 30, { width: 75, align: 'right' });
+      doc.text('Discount:', boxX + 12, y + 30);
+      doc.text(`-$${Number(rx.discountAmount || 0).toFixed(2)}`, boxX + boxW - 90, y + 30, { width: 78, align: 'right' });
 
-      doc.text('Tax / Service Charge:', 335, summaryTop + 48);
-      doc.text(`+$${Number(rx.taxAmount || 0).toFixed(2)}`, 470, summaryTop + 48, { width: 75, align: 'right' });
+      doc.text('Tax / Service Charge:', boxX + 12, y + 48);
+      doc.text(`+$${Number(rx.taxAmount || 0).toFixed(2)}`, boxX + boxW - 90, y + 48, { width: 78, align: 'right' });
 
-      doc.moveTo(330, summaryTop + 68).lineTo(545, summaryTop + 68).strokeColor('#cbd5e1').stroke();
+      doc.moveTo(boxX + 10, y + 68).lineTo(boxX + boxW - 10, y + 68).stroke('#cbd5e1');
 
       doc.fontSize(11).font('Helvetica-Bold').fillColor('#0f172a');
-      doc.text('Total Payable:', 335, summaryTop + 76);
-      doc.text(`$${Number(rx.totalCost || 0).toFixed(2)}`, 470, summaryTop + 76, { width: 75, align: 'right' });
+      doc.text('Total Payable:', boxX + 12, y + 76);
+      doc.text(`$${Number(rx.totalCost || 0).toFixed(2)}`, boxX + boxW - 90, y + 76, { width: 78, align: 'right' });
 
-      // Billing & Dispense Status Badges
+      // ─── Status panel (left of billing box) ─────────────────────────
+      const statusX = PAGE_LEFT;
+      const statusW = boxX - PAGE_LEFT - 10;
+      doc.rect(statusX, y, statusW, boxH).fillAndStroke('#ffffff', '#94a3b8');
+
       doc.fontSize(9).font('Helvetica-Bold');
-      doc.fillColor('#0284c7').text(`Dispense Status: ${rx.status.toUpperCase()}`, 40, summaryTop + 12);
+      doc.fillColor('#0284c7').text(`Dispense Status: ${(rx.status || '').toUpperCase()}`, statusX + 10, y + 12);
 
-      const billingColor = rx.billingStatus === BillingStatus.PAID ? '#16a34a' : rx.billingStatus === BillingStatus.BILLED ? '#0284c7' : '#d97706';
-      doc.fillColor(billingColor).text(`Billing Status: ${rx.billingStatus.toUpperCase()}`, 40, summaryTop + 30);
+      const billingColor =
+        rx.billingStatus === BillingStatus.PAID ? '#16a34a'
+          : rx.billingStatus === BillingStatus.BILLED ? '#0284c7'
+            : '#d97706';
+      doc.fillColor(billingColor)
+        .text(`Billing Status: ${(rx.billingStatus || 'unbilled').toUpperCase()}`, statusX + 10, y + 30);
 
+      doc.font('Helvetica').fillColor('#64748b').fontSize(8);
       if (rx.dispensedBy) {
-        doc.fillColor('#64748b').font('Helvetica').text(`Dispensed By: ${rx.dispensedBy}`, 40, summaryTop + 48);
+        doc.text(`Dispensed By: ${rx.dispensedBy}`, statusX + 10, y + 48);
+      }
+      if (rx.dispensedAt) {
+        doc.text(`Dispensed At: ${new Date(rx.dispensedAt).toLocaleString()}`, statusX + 10, y + 60);
+      }
+      doc.text('🔒 Secure & Encrypted Record — SHA-256 Validated', statusX + 10, y + 80, { width: statusW - 20 });
+
+      y += boxH + 16;
+
+      // ─── Notes ──────────────────────────────────────────────────────
+      if (rx.notes) {
+        doc.rect(PAGE_LEFT, y, PAGE_WIDTH, 34).fillAndStroke('#f1f5f9', '#cbd5e1');
+        doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(9);
+        doc.text('NOTES / INSTRUCTIONS', PAGE_LEFT + 8, y + 5);
+        doc.font('Helvetica').fontSize(8).fillColor('#475569');
+        doc.text(rx.notes, PAGE_LEFT + 8, y + 18, { width: PAGE_WIDTH - 16 });
+        y += 34;
       }
 
-      // Security / Encryption watermark box
-      doc.rect(40, summaryTop + 70, 260, 40).fill('#f1f5f9');
-      doc.fillColor('#475569').fontSize(8).font('Helvetica');
-      doc.text('🔒 SECURE & ENCRYPTED RECORD', 48, summaryTop + 76);
-      doc.text(`Hash Verification: SHA-256 Validated`, 48, summaryTop + 88);
+      // ─── Signature strip ────────────────────────────────────────────
+      y += 14;
+      doc.moveTo(PAGE_LEFT, y).lineTo(PAGE_RIGHT, y).stroke('#cbd5e1');
+      y += 8;
 
-      // Footer
-      doc.fontSize(8).fillColor('#94a3b8').text('This document is electronically generated by MediCore Health System. Valid without physical signature.', 40, 780, { align: 'center', width: 515 });
+      doc.font('Helvetica-Bold').fontSize(9).fillColor('#0f172a');
+      doc.text('PHARMACIST SIGNATURE', PAGE_LEFT, y);
+      doc.text('ATTENDING PHYSICIAN', PAGE_RIGHT - 180, y, { width: 180, align: 'right' });
+
+      doc.font('Helvetica').fillColor('#64748b').fontSize(8);
+      doc.text('Name: ____________________', PAGE_LEFT, y + 14);
+      doc.text('Date: ____________________', PAGE_LEFT, y + 26);
+      doc.text(`Dr. ${rx.doctorName || '—'}`, PAGE_RIGHT - 180, y + 14, { width: 180, align: 'right' });
+      doc.text(`Date: ${new Date(rx.createdAt).toLocaleDateString()}`, PAGE_RIGHT - 180, y + 26, { width: 180, align: 'right' });
+
+      // ─── Footer ─────────────────────────────────────────────────────
+      doc
+        .fontSize(7)
+        .fillColor('#94a3b8')
+        .text(
+          'This document is electronically generated by NERUO MULTI SPECIALITY Health System. Valid without physical signature.',
+          PAGE_LEFT,
+          800,
+          { width: PAGE_WIDTH, align: 'center' },
+        );
 
       doc.end();
 
