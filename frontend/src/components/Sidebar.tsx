@@ -28,6 +28,7 @@ const roleMenus: Record<string, { icon: string; label: string; href: string }[]>
     { icon: '🚨', label: 'Triage & Priority', href: '/dashboard/nurse?tab=triage', },
     { icon: '📂', label: 'Patient History', href: '/dashboard/nurse?tab=history', },
     { icon: '🧪', label: 'Test Reports', href: '/dashboard/nurse?tab=reports', },
+    { icon: '📋', label: 'Discharge Summaries', href: '/dashboard/nurse?tab=discharges', },
     { icon: '🛏️', label: 'Bed Management', href: '/dashboard/nurse/beds', },
   ],
   doctor: [
@@ -44,11 +45,10 @@ const roleMenus: Record<string, { icon: string; label: string; href: string }[]>
     { icon: '📊', label: 'Dashboard', href: '/dashboard/management' },
     { icon: '👥', label: 'All Staff', href: '/dashboard/management?tab=staff' },
     { icon: '🏥', label: 'All Patients', href: '/dashboard/management?tab=patients' },
+    { icon: '📋', label: 'Discharge Summaries', href: '/dashboard/management?tab=discharges' },
     { icon: '📢', label: 'Broadcast', href: '/dashboard/management?tab=broadcast' },
     // { icon: '🛏️', label: 'Bed Management', href: '/dashboard/admin/beds' },
     { icon: '🛏️', label: 'Bed Management', href: '/dashboard/management/beds' },
-
-
   ],
   patient: [
     { icon: '📊', label: 'My Records', href: '/dashboard/patient' },

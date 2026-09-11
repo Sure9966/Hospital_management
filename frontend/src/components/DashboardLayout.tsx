@@ -50,7 +50,7 @@ export default function DashboardLayout({
             <span style={{ fontWeight: 800, color: 'var(--text-main)' }}>
               {title || `${role.toUpperCase()} PORTAL`}
             </span>
-            <span style={{ fontSize: 12, opacity: 0.6, fontWeight: 500 }}>— MediCore Neuro Multi Speciality Hospital</span>
+            {/* <span style={{ fontSize: 12, opacity: 0.6, fontWeight: 500 }}>— MediCore Neuro Multi Speciality Hospital</span> */}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <ThemeSelector />

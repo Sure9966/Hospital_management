@@ -10,23 +10,46 @@ export default function ManagementDashboard() {
   const [stats, setStats] = useState<any>({});
   const [staff, setStaff] = useState<any[]>([]);
   const [patients, setPatients] = useState<any[]>([]);
+  const [dischargeSummaries, setDischargeSummaries] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [broadcastForm, setBroadcastForm] = useState({ title: '', message: '', targetRole: '' });
   const [loading, setLoading] = useState(false);
-  const [tab, setTab] = useState<'overview' | 'staff' | 'patients' | 'broadcast'>('overview');
+  const [tab, setTab] = useState<'overview' | 'staff' | 'patients' | 'discharges' | 'broadcast'>('overview');
 
   useEffect(() => {
     api.get('/management/dashboard').then(r => setStats(r.data));
     api.get('/users').then(r => setStaff(r.data));
     api.get('/patients').then(r => setPatients(r.data));
+    api.get('/management/discharges').then(r => setDischargeSummaries(r.data)).catch(() => {});
   }, []);
   useEffect(() => {
     const tabParam = searchParams.get('tab');
-    if (tabParam === 'staff' || tabParam === 'patients' || tabParam === 'broadcast') {
-      setTab(tabParam);
+    if (tabParam === 'staff' || tabParam === 'patients' || tabParam === 'discharges' || tabParam === 'broadcast') {
+      setTab(tabParam as any);
     } else {
       setTab('overview');
     }
   }, [searchParams]);
+
+  const downloadDischargePdf = async (dischargeId: string, patientId: string) => {
+    try {
+      toast.loading('Downloading discharge PDF...', { id: 'management-pdf-download' });
+      const response = await api.get(`/management/discharges/${dischargeId}/pdf`, {
+        responseType: 'blob',
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${patientId}_discharge.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      toast.success('✅ Discharge PDF downloaded successfully', { id: 'management-pdf-download' });
+    } catch (error) {
+      toast.error('Failed to download discharge PDF', { id: 'management-pdf-download' });
+    }
+  };
+
   const handleBroadcast = async (e: React.FormEvent) => {
     e.preventDefault(); setLoading(true);
     try {
@@ -47,14 +70,20 @@ export default function ManagementDashboard() {
     under_treatment: 'badge-warning', discharged: 'badge-gray',
   };
 
+  const filteredDischarges = dischargeSummaries.filter(d =>
+    (d.patientName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (d.patientId || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (d.diagnosis || '').toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
     <DashboardLayout role="management">
       <div className="topbar">
         <div className="topbar-title">Hospital Management</div>
         <div className="flex gap-2">
-          {(['overview', 'staff', 'patients', 'broadcast'] as const).map(t => (
+          {(['overview', 'staff', 'patients', 'discharges', 'broadcast'] as const).map(t => (
             <button key={t} className={`btn btn-sm ${tab === t ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab(t)} style={{ textTransform: 'capitalize' }}>
-              {t === 'overview' ? '📊' : t === 'staff' ? '👥' : t === 'patients' ? '🏥' : '📢'} {t}
+              {t === 'overview' ? '📊' : t === 'staff' ? '👥' : t === 'patients' ? '🏥' : t === 'discharges' ? '📋' : '📢'} {t}
             </button>
           ))}
         </div>
@@ -154,6 +183,78 @@ export default function ManagementDashboard() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {tab === 'discharges' && (
+          <div className="card">
+            <div className="card-header" style={{ flexWrap: 'wrap', gap: 12 }}>
+              <span className="card-title">📋 Patient Discharge Summaries & PDF Documents ({filteredDischarges.length})</span>
+              <input
+                type="text"
+                className="form-control form-control-sm"
+                placeholder="🔍 Search patient name, ID, or diagnosis..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                style={{ width: 260 }}
+              />
+            </div>
+            <div className="card-body">
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 14 }}>
+                Hospital Management view for discharged patients and official backend-generated discharge PDFs.
+              </p>
+              {filteredDischarges.length === 0 ? (
+                <div className="empty-state">
+                  <div className="empty-icon">📋</div>
+                  <h3>No discharge summaries found</h3>
+                  <p>Discharged patient records will appear here when generated.</p>
+                </div>
+              ) : (
+                <div className="table-container">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Patient ID</th>
+                        <th>Patient Name</th>
+                        <th>Admission No</th>
+                        <th>Discharge Date</th>
+                        <th>Condition</th>
+                        <th>Diagnosis</th>
+                        <th>Summary / PDF Content</th>
+                        <th>Discharge PDF Action</th>
+                        <th>Date Created</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredDischarges.map(d => (
+                        <tr key={d.id}>
+                          <td><code style={{ color: 'var(--primary-light)', fontSize: 12 }}>{d.patientId}</code></td>
+                          <td><strong>{d.patientName}</strong></td>
+                          <td><code>{d.admissionNumber || 'N/A'}</code></td>
+                          <td>{d.dischargeDate}</td>
+                          <td><span className="badge badge-success">{d.conditionAtDischarge || 'Stable'}</span></td>
+                          <td>{d.diagnosis || 'N/A'}</td>
+                          <td style={{ maxWidth: 260, fontSize: 12, color: 'var(--text-secondary)' }}>
+                            <div style={{ maxHeight: 60, overflowY: 'auto', whiteSpace: 'pre-wrap' }}>
+                              {d.dischargeSummary || 'No summary text attached.'}
+                            </div>
+                          </td>
+                          <td>
+                            <button
+                              className="btn btn-primary btn-sm"
+                              onClick={() => downloadDischargePdf(d.id, d.patientId)}
+                            >
+                              📄 Download PDF
+                            </button>
+                          </td>
+                          <td style={{ fontSize: 11 }}>{new Date(d.createdAt).toLocaleDateString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         )}

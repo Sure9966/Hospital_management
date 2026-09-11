@@ -94,10 +94,35 @@ export default function NurseDashboard() {
     return `badge ${m[p] || 'badge-gray'}`;
   };
 
+  const downloadDischargePdf = async (dischargeId: string, patientId: string) => {
+    try {
+      toast.loading('Downloading discharge PDF...', { id: 'discharge-pdf-download' });
+      const response = await api.get(`/nurse/discharges/${dischargeId}/pdf`, {
+        responseType: 'blob',
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${patientId}_discharge.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      toast.success('✅ Discharge PDF downloaded successfully', { id: 'discharge-pdf-download' });
+    } catch (error) {
+      toast.error('Failed to download discharge PDF', { id: 'discharge-pdf-download' });
+    }
+  };
+
   const filteredVitals = vitals.filter(v =>
     v.patientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
     v.patientId.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (v.triagePriority && v.triagePriority.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
+  const filteredDischarges = dischargeSummaries.filter(d =>
+    (d.patientName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (d.patientId || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (d.diagnosis || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
@@ -117,6 +142,7 @@ export default function NurseDashboard() {
             { id: 'triage', label: '📝 Triage & Priority Notes', icon: '🚨' },
             { id: 'history', label: '🏥 Patient Medical History', icon: '📂' },
             { id: 'reports', label: '🧪 Test Reports Overview', icon: '🔬' },
+            { id: 'discharges', label: '📋 Discharge Summaries', icon: '📄' },
           ].map(tab => (
             <button
               key={tab.id}
@@ -312,6 +338,79 @@ export default function NurseDashboard() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 5: Discharge Summaries */}
+        {activeTab === 'discharges' && (
+          <div className="card">
+            <div className="card-header" style={{ flexWrap: 'wrap', gap: 12 }}>
+              <span className="card-title">📋 Patient Discharge Summaries & PDF Documents ({filteredDischarges.length})</span>
+              <input
+                type="text"
+                className="form-control form-control-sm"
+                placeholder="🔍 Search patient name, ID, or diagnosis..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                style={{ width: 260 }}
+              />
+            </div>
+            <div className="card-body">
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 14 }}>
+                Review complete patient discharge summaries and download official generated PDF reports.
+              </p>
+              {filteredDischarges.length === 0 ? (
+                <div className="empty-state">
+                  <div className="empty-icon">📋</div>
+                  <h3>No discharge summaries found</h3>
+                  <p>Discharged patient records will be listed here.</p>
+                </div>
+              ) : (
+                <div className="table-container">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Patient ID</th>
+                        <th>Patient Name</th>
+                        <th>Admission No</th>
+                        <th>Discharge Date</th>
+                        <th>Condition</th>
+                        <th>Diagnosis</th>
+                        <th>Summary / PDF Content</th>
+                        <th>Discharge PDF Action</th>
+                        <th>Date Created</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredDischarges.map(d => (
+                        <tr key={d.id}>
+                          <td><code style={{ color: 'var(--primary-light)', fontSize: 12 }}>{d.patientId}</code></td>
+                          <td><strong>{d.patientName}</strong></td>
+                          <td><code>{d.admissionNumber || 'N/A'}</code></td>
+                          <td>{d.dischargeDate}</td>
+                          <td><span className="badge badge-success">{d.conditionAtDischarge || 'Stable'}</span></td>
+                          <td>{d.diagnosis || 'N/A'}</td>
+                          <td style={{ maxWidth: 260, fontSize: 12, color: 'var(--text-secondary)' }}>
+                            <div style={{ maxHeight: 60, overflowY: 'auto', whiteSpace: 'pre-wrap' }}>
+                              {d.dischargeSummary || 'No summary text attached.'}
+                            </div>
+                          </td>
+                          <td>
+                            <button
+                              className="btn btn-primary btn-sm"
+                              onClick={() => downloadDischargePdf(d.id, d.patientId)}
+                            >
+                              📄 Download PDF
+                            </button>
+                          </td>
+                          <td style={{ fontSize: 11 }}>{new Date(d.createdAt).toLocaleDateString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         )}

@@ -142,7 +142,7 @@ export default function Logo({
 
           {/* Subtitle Header */}
           <div className="brand-subtitle">
-            <span className="subtitle-text">NEURO MULTI SPECIALITY HOSPITAL</span>
+            {/* <span className="subtitle-text">NEURO MULTI SPECIALITY HOSPITAL</span> */}
           </div>
 
           {/* Elegant Underline Divider */}

@@ -206,10 +206,14 @@ export class NurseService {
       throw new NotFoundException('Discharge summary not found');
     }
 
-    const fullPath = path.join(this.storageDir, `${discharge.patientId}_discharge.pdf`);
+    let fullPath = path.join(this.storageDir, `${discharge.patientId}_discharge.pdf`);
 
     if (!fs.existsSync(fullPath)) {
-      throw new NotFoundException('Discharge PDF not found');
+      if (discharge.dischargePdfKey && fs.existsSync(path.join(this.storageDir, discharge.dischargePdfKey))) {
+        fullPath = path.join(this.storageDir, discharge.dischargePdfKey);
+      } else {
+        throw new NotFoundException('Discharge PDF not found');
+      }
     }
 
     return {
