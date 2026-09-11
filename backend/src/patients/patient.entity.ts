@@ -26,10 +26,13 @@ export class Patient {
   id: string;
 
   @Column({ unique: true })
-  patientId: string; // e.g. PAT-2024-0001
+  patientId: string; // e.g. NMH26000000
 
   @Column({ nullable: true, unique: true })
   opdTokenNumber: string; // e.g. TK-2026-0042
+
+  @Column({ nullable: true, unique: true })
+  admissionNumber: string; // e.g. IP26000000
 
   @Column()
   firstName: string;

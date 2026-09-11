@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import ThemeSelector from '@/components/ThemeSelector';
 import CenteredLoader from '@/components/CenteredLoader';
+import Logo from '@/components/Logo';
 import { getToken, getUser, User } from '@/lib/auth';
 import { applyTheme, getCurrentTheme } from '@/lib/theme';
 
@@ -44,8 +45,12 @@ export default function DashboardLayout({
       <Sidebar role={role} />
       <main className="main-content">
         <header className="topbar">
-          <div className="topbar-title">
-            🏥 {title || `${role.toUpperCase()} PORTAL`} <span>— MediCore HMS</span>
+          <div className="topbar-title" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Logo variant="icon" size="sm" />
+            <span style={{ fontWeight: 800, color: 'var(--text-main)' }}>
+              {title || `${role.toUpperCase()} PORTAL`}
+            </span>
+            <span style={{ fontSize: 12, opacity: 0.6, fontWeight: 500 }}>— MediCore Neuro Multi Speciality Hospital</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <ThemeSelector />

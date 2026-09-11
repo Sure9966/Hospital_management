@@ -1,7 +1,8 @@
-import { Controller, Get, Post, Put, Param, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Param, Body, UseGuards, Res } from '@nestjs/common';
 import { NurseService } from './nurse.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { Response } from 'express';
 
 @Controller('nurse')
 @UseGuards(JwtAuthGuard)
@@ -32,5 +33,23 @@ export class NurseController {
   @Put('vitals/:id')
   update(@Param('id') id: string, @Body() body: any) {
     return this.nurseService.updateVital(id, body);
+  }
+
+  @Get('discharges')
+  getAllDischarges() {
+    return this.nurseService.getAllDischargeSummaries();
+  }
+
+  @Get('discharges/:id/pdf')
+  async getDischargePdf(@Param('id') id: string, @Res() res: Response) {
+    const { stream, filename, mimeType, size } = await this.nurseService.getDischargePdfStream(id);
+    
+    res.set({
+      'Content-Type': mimeType,
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Length': size,
+    });
+    
+    stream.pipe(res);
   }
 }

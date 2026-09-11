@@ -4,7 +4,10 @@ import { Repository } from 'typeorm';
 import { Vital } from './vital.entity';
 import { Patient } from '../patients/patient.entity';
 import { Prescription } from '../pharmacy/prescription.entity';
+import { DischargeSummary } from '../doctor/discharge-summary.entity';
 import { NotificationsService } from '../notifications/notifications.service';
+import * as fs from 'fs';
+import * as path from 'path';
 
 function isUuid(val?: string): boolean {
   if (!val) return false;
@@ -13,6 +16,8 @@ function isUuid(val?: string): boolean {
 
 @Injectable()
 export class NurseService {
+  private readonly storageDir = path.join(process.cwd(), 'secure_storage', 'discharges');
+
   constructor(
     @InjectRepository(Vital)
     private vitalRepo: Repository<Vital>,
@@ -20,8 +25,14 @@ export class NurseService {
     private patientRepo: Repository<Patient>,
     @InjectRepository(Prescription)
     private prescriptionRepo: Repository<Prescription>,
+    @InjectRepository(DischargeSummary)
+    private dischargeRepo: Repository<DischargeSummary>,
     private notificationsService: NotificationsService,
-  ) {}
+  ) {
+    if (!fs.existsSync(this.storageDir)) {
+      fs.mkdirSync(this.storageDir, { recursive: true });
+    }
+  }
 
   private async findPatientSafely(identifier?: string): Promise<Patient | null> {
     if (!identifier) return null;
@@ -182,6 +193,30 @@ export class NurseService {
       vitalsHistory,
       prescriptionsHistory,
       testReports,
+    };
+  }
+
+  async getAllDischargeSummaries() {
+    return this.dischargeRepo.find({ order: { createdAt: 'DESC' } });
+  }
+
+  async getDischargePdfStream(id: string) {
+    const discharge = await this.dischargeRepo.findOne({ where: { id } });
+    if (!discharge) {
+      throw new NotFoundException('Discharge summary not found');
+    }
+
+    const fullPath = path.join(this.storageDir, `${discharge.patientId}_discharge.pdf`);
+
+    if (!fs.existsSync(fullPath)) {
+      throw new NotFoundException('Discharge PDF not found');
+    }
+
+    return {
+      stream: fs.createReadStream(fullPath),
+      filename: `${discharge.patientId}_discharge.pdf`,
+      mimeType: 'application/pdf',
+      size: fs.statSync(fullPath).size,
     };
   }
 }

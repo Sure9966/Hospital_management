@@ -973,3 +973,195 @@ td { padding: 12px 16px; font-size: 13px; color: var(--text-primary); }
 .text-xs { font-size: 11px; }
 .font-bold { font-weight: 700; }
 .font-semibold { font-weight: 600; }
+
+/* ===== DYNAMIC MEDICORE HOSPITAL LOGO DESIGN SYSTEM ===== */
+.medicore-hospital-logo {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  user-select: none;
+  font-family: inherit;
+}
+
+/* Emblem Wrapper & Animations */
+.logo-emblem-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.medicore-hospital-logo:hover .logo-emblem-wrapper {
+  transform: scale(1.06) rotate(1deg);
+}
+
+.logo-emblem-wrapper.animated-pulse .emblem-svg {
+  animation: emblemSoftPulse 4s ease-in-out infinite alternate;
+}
+
+@keyframes emblemSoftPulse {
+  0% { filter: drop-shadow(0 0 6px rgba(14, 165, 233, 0.35)); }
+  50% { filter: drop-shadow(0 0 16px rgba(99, 102, 241, 0.65)); }
+  100% { filter: drop-shadow(0 0 8px rgba(168, 85, 247, 0.45)); }
+}
+
+.node-pulse {
+  animation: nodeGlow 2s ease-in-out infinite alternate;
+}
+@keyframes nodeGlow {
+  0% { opacity: 0.6; }
+  100% { opacity: 1; fill: #00f2fe; }
+}
+
+/* Typography Block */
+.logo-text-block {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* Brand Primary Text: MEDICORE */
+.brand-name-row {
+  display: flex;
+  align-items: baseline;
+  line-height: 1;
+}
+
+.brand-primary {
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+  background: linear-gradient(135deg, #0ea5e9 0%, #6366f1 50%, #a855f7 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-transform: uppercase;
+}
+
+.brand-tm {
+  font-size: 10px;
+  font-weight: 700;
+  color: #38bdf8;
+  margin-left: 2px;
+  vertical-align: super;
+}
+
+/* Brand Subtitle: NEURO MULTI SPECIALITY HOSPITAL */
+.brand-subtitle {
+  margin-top: 3px;
+  line-height: 1.2;
+}
+
+.subtitle-text {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  color: var(--text-secondary, #94a3b8);
+  text-transform: uppercase;
+}
+
+/* Divider Line */
+.brand-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+  width: 100%;
+}
+
+.divider-line {
+  height: 1px;
+  flex: 1;
+  background: linear-gradient(90deg, rgba(14, 165, 233, 0.6) 0%, rgba(99, 102, 241, 0.4) 50%, transparent 100%);
+}
+
+.divider-star {
+  font-size: 8px;
+  color: #38bdf8;
+}
+
+/* Specialty Badges Pill Row */
+.specialty-badges-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.badge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 3px 8px;
+  border-radius: 20px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e2e8f0;
+  backdrop-filter: blur(4px);
+  text-transform: uppercase;
+}
+
+.pill-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.pill-dot.red { background: #ef4444; box-shadow: 0 0 6px #ef4444; }
+.pill-dot.cyan { background: #38bdf8; box-shadow: 0 0 6px #38bdf8; }
+.pill-dot.purple { background: #a855f7; box-shadow: 0 0 6px #a855f7; }
+
+/* VARIANTS SPECIFIC STYLING */
+
+/* Sidebar Variant */
+.medicore-hospital-logo.variant-sidebar {
+  gap: 10px;
+}
+.medicore-hospital-logo.variant-sidebar .brand-primary {
+  font-size: 19px;
+  letter-spacing: 1px;
+}
+.medicore-hospital-logo.variant-sidebar .subtitle-text {
+  font-size: 7.5px;
+  letter-spacing: 0.6px;
+  color: var(--text-muted, #64748b);
+}
+
+/* Login Variant */
+.medicore-hospital-logo.variant-login {
+  flex-direction: column;
+  text-align: center;
+  align-items: center;
+  gap: 12px;
+}
+.medicore-hospital-logo.variant-login .logo-text-block {
+  align-items: center;
+}
+.medicore-hospital-logo.variant-login .brand-primary {
+  font-size: 28px;
+  letter-spacing: 2.5px;
+}
+.medicore-hospital-logo.variant-login .subtitle-text {
+  font-size: 11px;
+  letter-spacing: 1.8px;
+  color: #cbd5e1;
+}
+
+/* Full Header / Print Variant */
+.medicore-hospital-logo.variant-full {
+  gap: 16px;
+}
+.medicore-hospital-logo.variant-full .brand-primary {
+  font-size: 24px;
+}
+.medicore-hospital-logo.variant-full .subtitle-text {
+  font-size: 10px;
+  letter-spacing: 1.5px;
+}
+

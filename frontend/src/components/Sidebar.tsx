@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { clearAuth, getUser } from '@/lib/auth';
 import { useSocket } from '@/lib/useSocket';
 import toast from 'react-hot-toast';
+import Logo from '@/components/Logo';
 
 const roleMenus: Record<string, { icon: string; label: string; href: string }[]> = {
   admin: [
@@ -91,8 +92,7 @@ export default function Sidebar({ role }: { role: string }) {
     <>
       <aside className="sidebar">
         <div className="sidebar-logo">
-          <div className="logo-icon">🏥</div>
-          <h1>MediCore</h1>
+          <Logo variant="sidebar" size="md" />
         </div>
 
         <nav className="sidebar-nav">

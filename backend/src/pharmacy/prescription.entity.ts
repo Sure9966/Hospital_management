@@ -33,6 +33,9 @@ export class Prescription {
   @Column()
   patientId: string;
 
+  @Column({ nullable: true })
+  admissionNumber: string;
+
   @Column()
   patientName: string;
 

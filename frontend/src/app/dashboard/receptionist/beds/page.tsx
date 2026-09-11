@@ -588,7 +588,7 @@ export default function ReceptionistBedManagement() {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Patient ID (MRN) *</label>
-                  <input type="text" className="form-control" placeholder="e.g. PAT-2024-0102" value={admissionForm.patientId} onChange={(e) => setAdmissionForm({ ...admissionForm, patientId: e.target.value })} required />
+                  <input type="text" className="form-control" placeholder="e.g. NMH26000000" value={admissionForm.patientId} onChange={(e) => setAdmissionForm({ ...admissionForm, patientId: e.target.value })} required />
                 </div>
                 <div className="form-grid-2">
                   <div className="form-group">
@@ -702,7 +702,7 @@ export default function ReceptionistBedManagement() {
                   </div>
                   <div className="form-group">
                     <label className="form-label">Patient ID</label>
-                    <input className="form-control" placeholder="PAT-2024-0001" value={billingForm.patientId} onChange={(e) => setBillingForm({ ...billingForm, patientId: e.target.value })} />
+                    <input className="form-control" placeholder="NMH26000000" value={billingForm.patientId} onChange={(e) => setBillingForm({ ...billingForm, patientId: e.target.value })} />
                   </div>
                 </div>
 

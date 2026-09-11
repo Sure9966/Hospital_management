@@ -36,6 +36,7 @@ export default function DoctorDashboard() {
 
   const [dischargeForm, setDischargeForm] = useState({
     patientId: '',
+    admissionNumber: '',
     patientName: '',
     diagnosis: '',
     dischargeDate: new Date().toISOString().split('T')[0],
@@ -64,6 +65,7 @@ export default function DoctorDashboard() {
   const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
   const [prescriptionForm, setPrescriptionForm] = useState({
     patientId: '',
+    admissionNumber: '',
     patientName: '',
     doctorName: 'Doctor',
     notes: 'Take medicines after meals with warm water.',
@@ -185,6 +187,7 @@ export default function DoctorDashboard() {
   const openDischargeModal = (patient: any) => {
     setDischargeForm({
       patientId: patient.patientId,
+      admissionNumber: patient.admissionNumber || '',
       patientName: `${patient.firstName} ${patient.lastName}`,
       diagnosis: patient.diagnosis || '',
       dischargeDate: new Date().toISOString().split('T')[0],
@@ -322,6 +325,7 @@ export default function DoctorDashboard() {
     try {
       await api.post('/pharmacy/prescriptions', {
         patientId: prescriptionForm.patientId.trim(),
+        admissionNumber: prescriptionForm.admissionNumber.trim(),
         patientName: prescriptionForm.patientName.trim(),
         doctorName: prescriptionForm.doctorName,
         notes: prescriptionForm.notes,
@@ -939,6 +943,7 @@ export default function DoctorDashboard() {
                       <tr>
                         <th>Patient Name</th>
                         <th>Patient ID</th>
+                        <th>Admission No</th>
                         <th>Discharge Date</th>
                         <th>Condition</th>
                         <th>Diagnosis</th>
@@ -951,6 +956,7 @@ export default function DoctorDashboard() {
                         <tr key={d.id}>
                           <td><strong>{d.patientName}</strong></td>
                           <td><code>{d.patientId}</code></td>
+                          <td><code>{d.admissionNumber || 'N/A'}</code></td>
                           <td>{d.dischargeDate}</td>
                           <td><span className="badge badge-success">{d.conditionAtDischarge}</span></td>
                           <td>{d.diagnosis || 'N/A'}</td>
@@ -991,7 +997,7 @@ export default function DoctorDashboard() {
                 <div className="form-grid form-grid-2" style={{ marginBottom: 14 }}>
                   <div className="form-group">
                     <label className="form-label">Patient ID *</label>
-                    <input className="form-control" placeholder="PAT-2024-0001" value={consultForm.patientId} onChange={e => setConsultForm({ ...consultForm, patientId: e.target.value })} required />
+                    <input className="form-control" placeholder="NMH26000000" value={consultForm.patientId} onChange={e => setConsultForm({ ...consultForm, patientId: e.target.value })} required />
                   </div>
                   <div className="form-group">
                     <label className="form-label">Patient Name *</label>
@@ -1063,10 +1069,14 @@ export default function DoctorDashboard() {
             </div>
             <form onSubmit={handleSavePrescription}>
               <div className="modal-body">
-                <div className="form-grid form-grid-3" style={{ marginBottom: 14 }}>
+                <div className="form-grid form-grid-4" style={{ marginBottom: 14 }}>
                   <div className="form-group">
                     <label className="form-label">Patient ID *</label>
-                    <input className="form-control" placeholder="PAT-2024-0001" value={prescriptionForm.patientId} onChange={e => setPrescriptionForm({ ...prescriptionForm, patientId: e.target.value })} required />
+                    <input className="form-control" placeholder="NMH26000000" value={prescriptionForm.patientId} onChange={e => setPrescriptionForm({ ...prescriptionForm, patientId: e.target.value })} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Admission No</label>
+                    <input className="form-control" placeholder="IP26000000" value={prescriptionForm.admissionNumber} onChange={e => setPrescriptionForm({ ...prescriptionForm, admissionNumber: e.target.value })} />
                   </div>
                   <div className="form-group">
                     <label className="form-label">Patient Name *</label>
@@ -1301,7 +1311,7 @@ export default function DoctorDashboard() {
                   </div>
                   <div className="form-group">
                     <label className="form-label">Patient ID *</label>
-                    <input className="form-control" placeholder="PAT-2024-0001" value={bedRequestForm.patientId} onChange={e => setBedRequestForm({ ...bedRequestForm, patientId: e.target.value })} required />
+                    <input className="form-control" placeholder="NMH26000000" value={bedRequestForm.patientId} onChange={e => setBedRequestForm({ ...bedRequestForm, patientId: e.target.value })} required />
                   </div>
                 </div>
                 <div className="form-grid form-grid-2" style={{ marginBottom: 14 }}>
@@ -1403,6 +1413,18 @@ export default function DoctorDashboard() {
                     <input
                       className="form-control"
                       value={dischargeForm.patientId}
+                      disabled
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">
+                      Admission Number
+                    </label>
+
+                    <input
+                      className="form-control"
+                      value={dischargeForm.admissionNumber}
                       disabled
                     />
                   </div>

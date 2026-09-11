@@ -244,7 +244,7 @@ export default function NurseDashboard() {
               <div className="flex gap-3" style={{ marginBottom: 20 }}>
                 <input
                   className="form-control"
-                  placeholder="Enter Patient ID (e.g. PAT-2024-0001)..."
+                  placeholder="Enter Patient ID (e.g. NMH26000000)..."
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
                   style={{ maxWidth: 360 }}

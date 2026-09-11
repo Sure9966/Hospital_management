@@ -7,6 +7,7 @@ import { setAuth } from '@/lib/auth';
 import toast from 'react-hot-toast';
 import CenteredLoader from '@/components/CenteredLoader';
 import { applyTheme, getCurrentTheme } from '@/lib/theme';
+import Logo from '@/components/Logo';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -73,7 +74,7 @@ export default function LoginPage() {
             <span className="live-dot" />
             <span>HMS Enterprise Portal 3.0</span>
           </div>
-          <h2>Medi<span>Core</span> System</h2>
+          <Logo variant="full" size="lg" showBadges={true} />
         </div>
 
         {/* CENTER: Main Hospital Animation Showcase */}
@@ -152,7 +153,9 @@ export default function LoginPage() {
       <div className="login-right-form-panel">
         <div className="login-form-card">
           <div className="login-card-header">
-            <div className="mobile-logo-circle">🏥</div>
+            <div style={{ marginBottom: 12 }}>
+              <Logo variant="compact" size="sm" />
+            </div>
             <h1>Welcome Back</h1>
             <p>Sign in to access your role-based hospital dashboard</p>
           </div>

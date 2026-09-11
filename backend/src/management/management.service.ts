@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../users/user.entity';
@@ -6,18 +6,28 @@ import { Patient } from '../patients/patient.entity';
 import { Appointment } from '../receptionist/appointment.entity';
 import { Prescription } from '../pharmacy/prescription.entity';
 import { Vital } from '../nurse/vital.entity';
+import { DischargeSummary } from '../doctor/discharge-summary.entity';
 import { NotificationsService } from '../notifications/notifications.service';
+import * as fs from 'fs';
+import * as path from 'path';
 
 @Injectable()
 export class ManagementService {
+  private readonly storageDir = path.join(process.cwd(), 'secure_storage', 'discharges');
+
   constructor(
     @InjectRepository(User) private userRepo: Repository<User>,
     @InjectRepository(Patient) private patientRepo: Repository<Patient>,
     @InjectRepository(Appointment) private appointmentRepo: Repository<Appointment>,
     @InjectRepository(Prescription) private prescriptionRepo: Repository<Prescription>,
     @InjectRepository(Vital) private vitalRepo: Repository<Vital>,
+    @InjectRepository(DischargeSummary) private dischargeRepo: Repository<DischargeSummary>,
     private notificationsService: NotificationsService,
-  ) {}
+  ) {
+    if (!fs.existsSync(this.storageDir)) {
+      fs.mkdirSync(this.storageDir, { recursive: true });
+    }
+  }
 
   async getDashboardStats() {
     const [
@@ -57,5 +67,29 @@ export class ManagementService {
       type: 'broadcast',
       targetRole,
     });
+  }
+
+  async getAllDischargeSummaries() {
+    return this.dischargeRepo.find({ order: { createdAt: 'DESC' } });
+  }
+
+  async getDischargePdfStream(id: string) {
+    const discharge = await this.dischargeRepo.findOne({ where: { id } });
+    if (!discharge) {
+      throw new NotFoundException('Discharge summary not found');
+    }
+
+    const fullPath = path.join(this.storageDir, `${discharge.patientId}_discharge.pdf`);
+
+    if (!fs.existsSync(fullPath)) {
+      throw new NotFoundException('Discharge PDF not found');
+    }
+
+    return {
+      stream: fs.createReadStream(fullPath),
+      filename: `${discharge.patientId}_discharge.pdf`,
+      mimeType: 'application/pdf',
+      size: fs.statSync(fullPath).size,
+    };
   }
 }

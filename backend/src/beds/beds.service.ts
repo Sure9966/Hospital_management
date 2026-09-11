@@ -9,7 +9,7 @@ export class BedsService implements OnModuleInit {
     @InjectRepository(Ward) private wardRepo: Repository<Ward>,
     @InjectRepository(Bed) private bedRepo: Repository<Bed>,
     @InjectRepository(Admission) private admissionRepo: Repository<Admission>,
-  ) {}
+  ) { }
 
   async onModuleInit() {
     try {
@@ -33,12 +33,12 @@ export class BedsService implements OnModuleInit {
 
     for (const wData of defaultWards) {
       const ward = await this.wardRepo.save(this.wardRepo.create(wData));
-      
+
       // Seed 4-6 beds per ward
       for (let i = 1; i <= 5; i++) {
         const bedNum = `BED-${ward.name.substring(0, 3).toUpperCase()}-${100 + i}`;
         const roomNum = `Room ${100 + Math.ceil(i / 2)}`;
-        
+
         let status = BedStatus.VACANT;
         let pName: string | null = null;
         let pId: string | null = null;
@@ -46,7 +46,7 @@ export class BedsService implements OnModuleInit {
         if (i === 1) {
           status = BedStatus.OCCUPIED;
           pName = `Patient Demo ${i}`;
-          pId = `PAT-2024-000${i}`;
+          pId = `NMH26000000${i}`;
         } else if (i === 2) {
           status = BedStatus.CLEANING;
         }
@@ -69,7 +69,7 @@ export class BedsService implements OnModuleInit {
     // Seed sample pending admissions
     await this.admissionRepo.save([
       this.admissionRepo.create({
-        patientId: 'PAT-2024-0089',
+        patientId: 'NMH26000000',
         patientName: 'Robert Vance',
         doctorName: 'Dr. Sarah Jenkins',
         diagnosis: 'Acute Appendicitis',
@@ -78,7 +78,7 @@ export class BedsService implements OnModuleInit {
         notes: 'Post-op recovery bed needed',
       }),
       this.admissionRepo.create({
-        patientId: 'PAT-2024-0092',
+        patientId: 'NMH26000000',
         patientName: 'Elena Rostova',
         doctorName: 'Dr. Michael Chang',
         diagnosis: 'Severe Pneumonia',

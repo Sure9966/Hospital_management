@@ -53,6 +53,10 @@ export class CreatePrescriptionDto {
   patientId: string;
 
   @IsString()
+  @IsOptional()
+  admissionNumber: string;
+
+  @IsString()
   @IsNotEmpty()
   patientName: string;
 

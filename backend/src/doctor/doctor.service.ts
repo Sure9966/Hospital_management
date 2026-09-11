@@ -8,6 +8,7 @@ import { Prescription } from '../pharmacy/prescription.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { Appointment } from '../receptionist/appointment.entity';
 import { DischargeSummary } from './discharge-summary.entity';
+import { HospitalConfig } from '../config/hospital.config';
 import * as PDFDocument from 'pdfkit';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -387,7 +388,7 @@ export class DoctorService {
 
       drawRow('Patient ID', discharge.patientId, 'Patient Name', discharge.patientName);
       drawRow('Age', (patient as any).age ? `${(patient as any).age} Yrs` : '—', 'Gender', patient.gender || '—');
-      drawRow('Admission No', (patient as any).admissionNo || '—', 'Visit Type', (patient as any).visitType || 'InPatient');
+      drawRow('Admission No', discharge.admissionNumber || patient.admissionNumber || '—', 'Visit Type', (patient as any).visitType || 'InPatient');
       drawRow('Specialty', (patient as any).specialty || 'GENERAL', 'Consultant', discharge.doctorName || '—');
       drawRow('Mobile Number', patient.phone || '—', 'Category', (patient as any).category || 'CASH');
       drawRow('Admission Date', (patient as any).admissionDate || '—', 'Discharge Date', discharge.dischargeDate);
@@ -603,6 +604,7 @@ export class DoctorService {
 
     const discharge = this.dischargeRepo.create({
       patientId: patient.patientId,
+      admissionNumber: patient.admissionNumber,
       patientName: `${patient.firstName} ${patient.lastName}`,
 
       doctorId: doctorUser?.id,

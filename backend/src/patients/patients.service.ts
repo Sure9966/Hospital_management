@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Patient } from './patient.entity';
 import { NotificationsService } from '../notifications/notifications.service';
+import { HospitalConfig } from '../config/hospital.config';
 
 function isUuid(val?: string): boolean {
   if (!val) return false;
@@ -19,15 +20,17 @@ export class PatientsService {
 
   async create(data: Partial<Patient>, createdById?: string) {
     const count = await this.patientRepo.count();
-    const year = new Date().getFullYear();
-    const seq = String(count + 1).padStart(4, '0');
-    const patientId = data.patientId || `PAT-${year}-${seq}`;
+    const year = new Date().getFullYear().toString().slice(-2); // Get last 2 digits of year
+    const seq = String(count + 1).padStart(6, '0');
+    const patientId = data.patientId || `${HospitalConfig.prefix}${year}${seq}`;
     const opdTokenNumber = `TK-${year}-${seq}`;
+    const admissionNumber = `IP${year}${seq}`;
 
     const patient = this.patientRepo.create({
       ...data,
       patientId,
       opdTokenNumber,
+      admissionNumber,
     });
     const saved = await this.patientRepo.save(patient);
 

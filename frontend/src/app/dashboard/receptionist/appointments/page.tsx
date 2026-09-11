@@ -24,7 +24,7 @@ export default function AppointmentsPage() {
 
   const load = () => {
     api.get('/receptionist/appointments').then(r => setAppointments(r.data));
-    api.get('/patients').then(r => setPatients(r.data || [])).catch(() => {});
+    api.get('/patients').then(r => setPatients(r.data || [])).catch(() => { });
   };
   useEffect(() => { load(); }, []);
 
@@ -118,7 +118,7 @@ export default function AppointmentsPage() {
                       <td>
                         <select value={a.status} onChange={e => handleStatusChange(a.id, e.target.value)}
                           style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: 8, padding: '4px 8px', fontSize: 12, cursor: 'pointer' }}>
-                          {['scheduled','confirmed','in_progress','completed','cancelled'].map(s => <option key={s} value={s}>{s}</option>)}
+                          {['scheduled', 'confirmed', 'in_progress', 'completed', 'cancelled'].map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
                       </td>
                       <td>
@@ -167,7 +167,7 @@ export default function AppointmentsPage() {
                   </div>
                   <div className="form-group">
                     <label className="form-label">Patient ID</label>
-                    <input className="form-control" placeholder="PAT-2024-0001" value={form.patientId} onChange={e => set('patientId', e.target.value)} />
+                    <input className="form-control" placeholder="NMH26000000" value={form.patientId} onChange={e => set('patientId', e.target.value)} />
                   </div>
                   <div className="form-group">
                     <label className="form-label">Department *</label>

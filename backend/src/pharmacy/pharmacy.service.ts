@@ -143,6 +143,7 @@ export class PharmacyService {
 
     const prescription = this.prescriptionRepo.create({
       patientId: data.patientId,
+      admissionNumber: data.admissionNumber,
       patientName: data.patientName,
       doctorName: data.doctorName,
       diagnosis: data.diagnosis,

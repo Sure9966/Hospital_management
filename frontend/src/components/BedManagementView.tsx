@@ -430,12 +430,12 @@ export default function BedManagementView({
                           ? 'rgba(245,158,11,0.06)'
                           : 'var(--bg-surface)',
                     border: `1.5px solid ${isOccupied
-                        ? '#ef4444'
-                        : isVacant
-                          ? '#10b981'
-                          : isCleaning
-                            ? '#f59e0b'
-                            : 'var(--border)'
+                      ? '#ef4444'
+                      : isVacant
+                        ? '#10b981'
+                        : isCleaning
+                          ? '#f59e0b'
+                          : 'var(--border)'
                       }`,
                     display: 'flex',
                     flexDirection: 'column',
@@ -515,7 +515,7 @@ export default function BedManagementView({
                   <input
                     type="text"
                     className="form-control"
-                    placeholder="e.g. PAT-2024-0102"
+                    placeholder="e.g. NMH26000000"
                     value={admissionForm.patientId}
                     onChange={(e) => setAdmissionForm({ ...admissionForm, patientId: e.target.value })}
                     required

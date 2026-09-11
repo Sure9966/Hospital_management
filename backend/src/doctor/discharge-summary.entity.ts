@@ -13,6 +13,9 @@ export class DischargeSummary {
     @Column()
     patientId: string;
 
+    @Column({ nullable: true })
+    admissionNumber: string;
+
     @Column()
     patientName: string;
 
