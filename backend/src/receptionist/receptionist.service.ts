@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Appointment } from './appointment.entity';
 import { Patient } from '../patients/patient.entity';
+import { User, UserRole } from '../users/user.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 
 function isUuid(val?: string): boolean {
@@ -17,6 +18,8 @@ export class ReceptionistService {
     private appointmentRepo: Repository<Appointment>,
     @InjectRepository(Patient)
     private patientRepo: Repository<Patient>,
+    @InjectRepository(User)
+    private userRepo: Repository<User>,
     private notificationsService: NotificationsService,
   ) {}
 
@@ -29,7 +32,26 @@ export class ReceptionistService {
     return patient;
   }
 
+  private async resolveDoctorId(doctorId?: string, doctorName?: string): Promise<string | undefined> {
+    if (doctorId && isUuid(doctorId)) return doctorId;
+    if (!doctorName) return undefined;
+    const cleanName = doctorName.replace(/^Dr\.\s*/i, '').trim();
+    if (!cleanName || cleanName.toLowerCase() === 'general doctor') return undefined;
+
+    const doctors = await this.userRepo.find({ where: { role: UserRole.DOCTOR } });
+    const match = doctors.find(
+      d =>
+        `${d.firstName} ${d.lastName}`.toLowerCase().includes(cleanName.toLowerCase()) ||
+        cleanName.toLowerCase().includes(d.lastName.toLowerCase()),
+    );
+    return match?.id;
+  }
+
   async createAppointment(data: Partial<Appointment>, createdById?: string) {
+    if (!data.doctorId && data.doctorName) {
+      data.doctorId = await this.resolveDoctorId(data.doctorId, data.doctorName);
+    }
+
     const appointment = this.appointmentRepo.create(data);
     const saved = await this.appointmentRepo.save(appointment);
 
@@ -44,26 +66,49 @@ export class ReceptionistService {
       }
     }
 
-    // Send notification to the specific doctor if doctorId is provided
-    if (saved.doctorId) {
-      await this.notificationsService.sendToUser(
-        'New Patient Appointment Assigned',
-        `You have a new patient appointment: ${saved.patientName} (${saved.patientId || 'N/A'}) scheduled for ${saved.appointmentDate} at ${saved.appointmentTime}.`,
-        saved.doctorId,
-        'appointment',
-        saved.id,
-        createdById,
-      );
+    // Send notification to doctor
+    if (saved.status === 'in_progress') {
+      const details = `🚪 Patient ${saved.patientName} (${saved.patientId || 'N/A'}) has been sent in to your consultation room!\nDepartment: ${saved.department || 'General'}\nReason: ${saved.reason || 'OPD Consult'}\nNotes: ${saved.notes || 'OPD Token'}`;
+      
+      if (saved.doctorId) {
+        await this.notificationsService.sendToUser(
+          '🚪 Patient Sent In To Consultation Room',
+          details,
+          saved.doctorId,
+          'appointment',
+          saved.id,
+          createdById,
+        );
+      } else {
+        await this.notificationsService.sendToRole(
+          '🚪 Patient Sent In To Consultation Room',
+          details,
+          'doctor',
+          'appointment',
+          saved.id,
+          createdById,
+        );
+      }
     } else {
-      // Fallback: Notify all doctors
-      await this.notificationsService.sendToRole(
-        'New Appointment Scheduled',
-        `Appointment for ${saved.patientName} with ${saved.doctorName} on ${saved.appointmentDate} at ${saved.appointmentTime}.`,
-        'doctor',
-        'appointment',
-        saved.id,
-        createdById,
-      );
+      if (saved.doctorId) {
+        await this.notificationsService.sendToUser(
+          'New Patient Appointment Assigned',
+          `You have a new patient appointment: ${saved.patientName} (${saved.patientId || 'N/A'}) scheduled for ${saved.appointmentDate} at ${saved.appointmentTime}.`,
+          saved.doctorId,
+          'appointment',
+          saved.id,
+          createdById,
+        );
+      } else {
+        await this.notificationsService.sendToRole(
+          'New Appointment Scheduled',
+          `Appointment for ${saved.patientName} with ${saved.doctorName} on ${saved.appointmentDate} at ${saved.appointmentTime}.`,
+          'doctor',
+          'appointment',
+          saved.id,
+          createdById,
+        );
+      }
     }
 
     await this.notificationsService.sendToRole(
@@ -83,20 +128,49 @@ export class ReceptionistService {
   }
 
   async findAppointmentById(id: string) {
+    if (!isUuid(id)) return null;
     return this.appointmentRepo.findOne({ where: { id } });
   }
 
   async updateAppointment(id: string, data: Partial<Appointment>) {
+    if (!isUuid(id)) return null;
+
+    if (!data.doctorId && data.doctorName) {
+      data.doctorId = await this.resolveDoctorId(data.doctorId, data.doctorName);
+    }
+
     await this.appointmentRepo.update(id, data);
     const updated = await this.findAppointmentById(id);
 
-    if (updated && updated.patientId && (data.doctorId || data.doctorName)) {
+    if (updated && updated.patientId) {
       const patient = await this.findPatientSafely(updated.patientId);
       if (patient) {
         if (updated.doctorId) patient.assignedDoctorId = updated.doctorId;
         if (updated.doctorName) patient.assignedDoctorName = updated.doctorName;
         if (updated.department) patient.department = updated.department;
         await this.patientRepo.save(patient);
+      }
+    }
+
+    if (updated && updated.status === 'in_progress') {
+      const details = `🚪 Patient ${updated.patientName} (${updated.patientId || 'N/A'}) has been sent in to your consultation room!\nDepartment: ${updated.department || 'General'}\nReason: ${updated.reason || 'OPD Consult'}\nNotes: ${updated.notes || 'OPD Token'}`;
+
+      if (updated.doctorId) {
+        await this.notificationsService.sendToUser(
+          '🚪 Patient Sent In To Consultation Room',
+          details,
+          updated.doctorId,
+          'appointment',
+          updated.id,
+        );
+      } else {
+        await this.notificationsService.sendToRole(
+          '🚪 Patient Sent In To Consultation Room',
+          details,
+          'doctor',
+          'appointment',
+          updated.id,
+        );
       }
     }
 

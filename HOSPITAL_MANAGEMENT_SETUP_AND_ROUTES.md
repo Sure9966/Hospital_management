@@ -9,6 +9,7 @@
 * **Render Dashboard**: [https://dashboard.render.com/d/dpg-daidu5jm8hqs73cf8fq0-a](https://dashboard.render.com/d/dpg-daidu5jm8hqs73cf8fq0-a)
 * **Service ID**: `dpg-daidu5jm8hqs73cf8fq0-a`
 * **Dedicated Render Setup Guide**: See [`RENDER_DATABASE_SETUP.md`](file:///c:/Users/user/Documents/nextjs/RENDER_DATABASE_SETUP.md) for full configuration steps.
+* **Cloudflare R2 PDF Storage Guide**: See [`CLOUDFLARE_R2_STORAGE_GUIDE.md`](file:///c:/Users/user/Documents/nextjs/CLOUDFLARE_R2_STORAGE_GUIDE.md) for PDF storage setup.
 
 ---
 

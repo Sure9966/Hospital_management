@@ -36,8 +36,22 @@ export default function RegisterPatient() {
 
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  const [submitting, setSubmitting] = useState(false);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading || submitting || createdPatient) return;
+    if (!department) {
+      toast.error('Hospital Department is required');
+      return;
+    }
+    if (!form.assignedDoctorId) {
+      toast.error('Assigned Doctor is required');
+      return;
+    }
+    setSubmitting(true);
     setLoading(true);
     try {
       const { data } = await api.post('/patients', form);
@@ -47,6 +61,7 @@ export default function RegisterPatient() {
       toast.error(err.response?.data?.message || 'Registration failed');
     } finally {
       setLoading(false);
+      setSubmitting(false);
     }
   };
 
@@ -126,7 +141,7 @@ export default function RegisterPatient() {
                   </div>
                   <div className="form-group">
                     <label className="form-label">Date of Birth *</label>
-                    <input type="date" className="form-control" value={form.dateOfBirth} onChange={e => set('dateOfBirth', e.target.value)} required />
+                    <input type="date" className="form-control" value={form.dateOfBirth} max={todayStr} onChange={e => set('dateOfBirth', e.target.value)} required />
                   </div>
                   <div className="form-group">
                     <label className="form-label">Gender *</label>
@@ -144,7 +159,7 @@ export default function RegisterPatient() {
                   </div>
                   <div className="form-group">
                     <label className="form-label">Phone *</label>
-                    <input className="form-control" placeholder="+91 (555) 000-0000" value={form.phone} onChange={e => set('phone', e.target.value)} required />
+                    <input className="form-control" placeholder="+91 1234567890" value={form.phone} onChange={e => set('phone', e.target.value)} required />
                   </div>
                   <div className="form-group">
                     <label className="form-label">Email</label>
@@ -169,7 +184,7 @@ export default function RegisterPatient() {
                   </div>
                   <div className="form-group">
                     <label className="form-label">Contact Phone</label>
-                    <input className="form-control" placeholder="+91 (555) 000-0000" value={form.emergencyPhone} onChange={e => set('emergencyPhone', e.target.value)} />
+                    <input className="form-control" placeholder="+91 1234567890" value={form.emergencyPhone} onChange={e => set('emergencyPhone', e.target.value)} />
                   </div>
                 </div>
               </div>
@@ -197,16 +212,16 @@ export default function RegisterPatient() {
               <div className="card-header"><span className="card-title">🛏️ Hospital Department & Attending Doctor Assignment</span></div>
               <div className="card-body">
                 <div className="form-grid form-grid-3">
-                  <div className="form-group">
+                  {/* <div className="form-group">
                     <label className="form-label">Status</label>
                     <select className="form-control" value={form.status} onChange={e => set('status', e.target.value)}>
                       <option value="registered">Registered</option>
                       <option value="admitted">Admitted</option>
                       <option value="under_treatment">Under Treatment</option>
                     </select>
-                  </div>
+                  </div> */}
                   <div className="form-group">
-                    <label className="form-label">Hospital Department</label>
+                    <label className="form-label">Hospital Department *</label>
                     <select
                       className="form-control"
                       value={department}
@@ -214,13 +229,14 @@ export default function RegisterPatient() {
                         setDepartment(e.target.value);
                         set('department', e.target.value);
                       }}
+                      required
                     >
                       <option value="">Select Department</option>
                       {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
                     </select>
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Assigned Doctor ({eligibleDoctors.length} available)</label>
+                    <label className="form-label">Assigned Doctor * ({eligibleDoctors.length} available)</label>
                     <select
                       className="form-control"
                       value={form.assignedDoctorId}
@@ -234,6 +250,7 @@ export default function RegisterPatient() {
                           admittedBy: doc ? `Dr. ${doc.firstName} ${doc.lastName}` : f.admittedBy,
                         }));
                       }}
+                      required
                     >
                       <option value="">Select Eligible Doctor</option>
                       {eligibleDoctors.map(d => (
@@ -243,18 +260,18 @@ export default function RegisterPatient() {
                       ))}
                     </select>
                   </div>
-                  <div className="form-group">
+                  {/* <div className="form-group">
                     <label className="form-label">Ward</label>
                     <input className="form-control" placeholder="General Ward" value={form.ward} onChange={e => set('ward', e.target.value)} />
-                  </div>
-                  <div className="form-group">
+                  </div> */}
+                  {/* <div className="form-group">
                     <label className="form-label">Bed Number</label>
                     <input className="form-control" placeholder="B-101" value={form.bedNumber} onChange={e => set('bedNumber', e.target.value)} />
-                  </div>
-                  <div className="form-group">
+                  </div> */}
+                  {/* <div className="form-group">
                     <label className="form-label">Assigned Nurse</label>
                     <input className="form-control" placeholder="Nurse Johnson" value={form.assignedNurse} onChange={e => set('assignedNurse', e.target.value)} />
-                  </div>
+                  </div> */}
                   <div className="form-group" style={{ gridColumn: 'span 3' }}>
                     <label className="form-label">Diagnosis</label>
                     <input className="form-control" placeholder="Initial diagnosis" value={form.diagnosis} onChange={e => set('diagnosis', e.target.value)} />
@@ -269,8 +286,17 @@ export default function RegisterPatient() {
 
             <div className="flex gap-3" style={{ justifyContent: 'flex-end' }}>
               <button type="button" className="btn btn-secondary" onClick={() => router.back()}>Cancel</button>
-              <button type="submit" className="btn btn-primary" disabled={loading} style={{ minWidth: 220 }}>
-                {loading ? '⏳ Registering...' : '🎟️ Register & Generate OPD Token'}
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={loading || submitting}
+                style={{
+                  minWidth: 220,
+                  opacity: loading || submitting ? 0.6 : 1,
+                  cursor: loading || submitting ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {loading || submitting ? '⏳ Registering & Saving...' : '🎟️ Register & Generate OPD Token'}
               </button>
             </div>
           </form>

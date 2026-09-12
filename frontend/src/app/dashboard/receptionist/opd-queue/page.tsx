@@ -9,7 +9,7 @@ export default function OpdQueuePage() {
   const [opdData, setOpdData] = useState<any>({ appointments: [], recentRegisteredPatients: [] });
   const [searchQuery, setSearchQuery] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('all');
-  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('waiting');
   const [loading, setLoading] = useState(true);
 
   // Quick appointment modal state
@@ -28,7 +28,6 @@ export default function OpdQueuePage() {
       .finally(() => setLoading(false));
   };
 
-  // useEffect(() => { loadData(); }, []);
   useEffect(() => {
     loadData();
 
@@ -47,13 +46,150 @@ export default function OpdQueuePage() {
       .catch(() => setEligibleDoctors([]));
   }, [quickForm.department]);
 
-  const handleStatusChange = async (id: string, status: string) => {
+  // Send In modal state
+  const [showSendInModal, setShowSendInModal] = useState(false);
+  const [sendInItem, setSendInItem] = useState<any>(null);
+  const [sendInDoctorId, setSendInDoctorId] = useState('');
+  const [sendInDoctorName, setSendInDoctorName] = useState('');
+  const [sendInNotes, setSendInNotes] = useState('');
+  const [sendingIn, setSendingIn] = useState(false);
+
+  const openSendInModal = (item: any) => {
+    let initialDocId = item.doctorId || '';
+    let initialDocName = item.doctorName || '';
+
+    if (!initialDocId && doctors.length > 0 && initialDocName) {
+      const match = doctors.find((d: any) =>
+        `${d.firstName} ${d.lastName}`.toLowerCase().includes(initialDocName.replace(/^Dr\.\s*/i, '').toLowerCase()) ||
+        (d.lastName && initialDocName.toLowerCase().includes(d.lastName.toLowerCase()))
+      );
+      if (match) {
+        initialDocId = match.id;
+        initialDocName = `${match.firstName} ${match.lastName}`;
+      }
+    }
+
+    if (!initialDocId && doctors.length > 0) {
+      // Default to first doctor matching department, or first available doctor
+      const deptMatch = doctors.find((d: any) => d.department === item.department);
+      const chosen = deptMatch || doctors[0];
+      initialDocId = chosen.id;
+      initialDocName = `${chosen.firstName} ${chosen.lastName}`;
+    }
+
+    setSendInItem(item);
+    setSendInDoctorId(initialDocId);
+    setSendInDoctorName(initialDocName);
+    setSendInNotes(item.notes || 'OPD Consultation');
+    setShowSendInModal(true);
+  };
+
+  const handleConfirmSendIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!sendInItem) return;
+    setSendingIn(true);
+
     try {
-      await api.put(`/receptionist/appointments/${id}`, { status });
-      toast.success('Queue status updated!');
+      const selectedDoc = doctors.find((d: any) => d.id === sendInDoctorId);
+      const docName = selectedDoc ? `${selectedDoc.firstName} ${selectedDoc.lastName}` : sendInDoctorName || 'Doctor';
+      const docId = sendInDoctorId || selectedDoc?.id;
+
+      const isPatientVirtual =
+        (typeof sendInItem === 'object' && (sendInItem.isPatientEntry || String(sendInItem.id).startsWith('p-'))) ||
+        (typeof sendInItem === 'string' && sendInItem.startsWith('p-'));
+
+      if (isPatientVirtual) {
+        await api.post('/receptionist/appointments', {
+          patientId: sendInItem.patientId,
+          patientName: sendInItem.patientName,
+          doctorId: docId,
+          doctorName: docName,
+          department: sendInItem.department,
+          appointmentDate: sendInItem.appointmentDate || new Date().toISOString().split('T')[0],
+          appointmentTime: sendInItem.appointmentTime || '09:00',
+          status: 'in_progress',
+          reason: 'OPD Queue Token',
+          notes: sendInNotes,
+        });
+      } else {
+        const apptId = typeof sendInItem === 'string' ? sendInItem : sendInItem?.id;
+        if (apptId) {
+          await api.put(`/receptionist/appointments/${apptId}`, {
+            status: 'in_progress',
+            doctorId: docId,
+            doctorName: docName,
+            notes: sendInNotes,
+          });
+        }
+      }
+
+      toast.success(`🚪 Sent ${sendInItem.patientName} to Dr. ${docName}'s Consultation Room!`);
+      setShowSendInModal(false);
+      setSendInItem(null);
       loadData();
-    } catch {
-      toast.error('Failed to update status');
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to send in patient to doctor');
+    } finally {
+      setSendingIn(false);
+    }
+  };
+
+  const handleStatusChange = async (itemOrId: any, status: string) => {
+    try {
+      const isPatientVirtual =
+        (typeof itemOrId === 'object' && (itemOrId.isPatientEntry || String(itemOrId.id).startsWith('p-'))) ||
+        (typeof itemOrId === 'string' && itemOrId.startsWith('p-'));
+
+      const targetItem = typeof itemOrId === 'object' ? itemOrId : combinedQueue.find((q: any) => q.id === itemOrId);
+      const patientName = targetItem?.patientName || 'Patient';
+      let doctorName = targetItem?.doctorName ? targetItem.doctorName.replace(/^Dr\.\s*/i, '') : 'Doctor';
+      let doctorId = targetItem?.doctorId;
+
+      if (!doctorId && doctors.length > 0 && doctorName) {
+        const match = doctors.find((d: any) =>
+          `${d.firstName} ${d.lastName}`.toLowerCase().includes(doctorName.toLowerCase()) ||
+          (d.lastName && doctorName.toLowerCase().includes(d.lastName.toLowerCase()))
+        );
+        if (match) {
+          doctorId = match.id;
+          doctorName = `${match.firstName} ${match.lastName}`;
+        }
+      }
+
+      if (isPatientVirtual) {
+        if (targetItem) {
+          await api.post('/receptionist/appointments', {
+            patientId: targetItem.patientId,
+            patientName: targetItem.patientName,
+            doctorId: doctorId || undefined,
+            doctorName: doctorName,
+            department: targetItem.department,
+            appointmentDate: targetItem.appointmentDate || new Date().toISOString().split('T')[0],
+            appointmentTime: targetItem.appointmentTime || '09:00',
+            status: status,
+            reason: 'OPD Queue Token',
+            notes: targetItem.notes,
+          });
+        }
+      } else {
+        const apptId = typeof itemOrId === 'string' ? itemOrId : itemOrId?.id;
+        if (apptId) {
+          await api.put(`/receptionist/appointments/${apptId}`, {
+            status,
+            doctorId: doctorId || undefined,
+            doctorName: doctorName,
+          });
+        }
+      }
+
+      if (status === 'in_progress') {
+        toast.success(`🚪 Sent ${patientName} to Dr. ${doctorName}'s Consultation Room!`);
+      } else {
+        toast.success(`Queue status updated to ${status.replace('_', ' ')}!`);
+      }
+      loadData();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to update status');
     }
   };
 
@@ -88,37 +224,55 @@ export default function OpdQueuePage() {
     return `badge ${map[s] || 'badge-gray'}`;
   };
 
-  // Filtered Appointments
-  const filteredAppointments = (opdData.appointments || []).filter((a: any) => {
-    const matchesSearch =
-      a.patientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      a.doctorName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      a.patientId.toLowerCase().includes(searchQuery.toLowerCase());
+  // Combine explicit appointments and registered patients into full OPD Queue list
+  const combinedQueue: any[] = [...(opdData.appointments || [])];
+  const existingPatientIds = new Set(combinedQueue.map((a: any) => a.patientId));
+
+  (opdData.recentRegisteredPatients || []).forEach((p: any) => {
+    if (!existingPatientIds.has(p.patientId) && !existingPatientIds.has(p.id)) {
+      combinedQueue.push({
+        id: `p-${p.id}`,
+        patientId: p.patientId,
+        patientName: `${p.firstName} ${p.lastName}`,
+        doctorId: p.assignedDoctorId || null,
+        doctorName: p.assignedDoctorName ? p.assignedDoctorName.replace(/^Dr\.\s*/i, '') : 'General Doctor',
+        department: p.department || 'General',
+        appointmentDate: p.createdAt ? new Date(p.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+        appointmentTime: p.createdAt ? new Date(p.createdAt).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }) : '09:00',
+        status: p.status || 'scheduled',
+        notes: `OPD Queue Token: ${p.opdTokenNumber || 'TK-REG'}`,
+        isPatientEntry: true,
+      });
+    }
+  });
+
+  // Filtered Queue Items
+  const filteredAppointments = combinedQueue.filter((a: any) => {
+    const pName = (a.patientName || '').toLowerCase();
+    const dName = (a.doctorName || '').toLowerCase();
+    const pId = (a.patientId || '').toLowerCase();
+    const q = searchQuery.toLowerCase();
+
+    const matchesSearch = pName.includes(q) || dName.includes(q) || pId.includes(q);
     const matchesDept = filterDepartment === 'all' || a.department === filterDepartment;
-    const matchesStatus = filterStatus === 'all' || a.status === filterStatus;
+
+    let matchesStatus = true;
+    if (filterStatus === 'waiting') {
+      matchesStatus = a.status === 'scheduled' || a.status === 'confirmed' || a.status === 'registered' || !a.status;
+    } else if (filterStatus !== 'all') {
+      matchesStatus = a.status === filterStatus;
+    }
+
     return matchesSearch && matchesDept && matchesStatus;
   });
 
-  // Doctor Appointment Overview Cards grouping
-  // const doctorOverview = (opdData.appointments || []).reduce((acc: any, a: any) => {
-  //   const doc = a.doctorName || 'Unassigned';
-  //   if (!acc[doc]) {
-  //     acc[doc] = { doctorName: doc, department: a.department, total: 0, waiting: 0, inProgress: 0, completed: 0 };
-  //   }
-  //   acc[doc].total += 1;
-  //   if (a.status === 'scheduled' || a.status === 'confirmed') acc[doc].waiting += 1;
-  //   if (a.status === 'in_progress') acc[doc].inProgress += 1;
-  //   if (a.status === 'completed') acc[doc].completed += 1;
-  //   return acc;
-  // }, {});
-
-  // const doctorsList = Object.values(doctorOverview);
   const doctorsList = doctors.map((doctor: any) => {
     const doctorName = `${doctor.firstName} ${doctor.lastName}`;
 
-    const doctorAppointments = (opdData.appointments || []).filter(
+    const doctorAppointments = combinedQueue.filter(
       (a: any) =>
         a.doctorId === doctor.id ||
+        (a.doctorName && a.doctorName.toLowerCase().includes(doctor.lastName.toLowerCase())) ||
         a.doctorName === doctorName
     );
 
@@ -132,7 +286,8 @@ export default function OpdQueuePage() {
       waiting: doctorAppointments.filter(
         (a: any) =>
           a.status === 'scheduled' ||
-          a.status === 'confirmed'
+          a.status === 'confirmed' ||
+          a.status === 'registered'
       ).length,
 
       inProgress: doctorAppointments.filter(
@@ -150,7 +305,7 @@ export default function OpdQueuePage() {
       <div className="topbar">
         <div className="topbar-title">🎟️ OPD Live Queue & Doctor Token Management</div>
         <div className="flex gap-2">
-          <button className="btn btn-primary" onClick={() => openQuickAppt()}>⚡ Quick Walk-in Entry</button>
+          {/* <button className="btn btn-primary" onClick={() => openQuickAppt()}>⚡ Quick Walk-in Entry</button> */}
           <Link href="/dashboard/receptionist/register" className="btn btn-secondary">+ Register Patient</Link>
         </div>
       </div>
@@ -226,8 +381,11 @@ export default function OpdQueuePage() {
                       value={filterStatus}
                       onChange={e => setFilterStatus(e.target.value)}
                     >
-                      <option value="all">All Statuses</option>
-                      {['scheduled', 'confirmed', 'in_progress', 'completed', 'cancelled'].map(s => <option key={s} value={s}>{s}</option>)}
+                      <option value="waiting">⏳ Waiting Queue Only</option>
+                      <option value="in_progress">🚪 In Doctor Room</option>
+                      <option value="completed">✅ Completed</option>
+                      <option value="cancelled">❌ Cancelled</option>
+                      <option value="all">📋 All Statuses</option>
                     </select>
                   </div>
                 </div>
@@ -264,16 +422,30 @@ export default function OpdQueuePage() {
                             <td>
                               <select
                                 value={a.status}
-                                onChange={e => handleStatusChange(a.id, e.target.value)}
+                                onChange={e => handleStatusChange(a, e.target.value)}
                                 style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: 8, padding: '4px 8px', fontSize: 12, cursor: 'pointer' }}
                               >
                                 {['scheduled', 'confirmed', 'in_progress', 'completed', 'cancelled'].map(s => <option key={s} value={s}>{s}</option>)}
                               </select>
                             </td>
                             <td>
-                              <button className="btn btn-secondary btn-sm" onClick={() => handleStatusChange(a.id, 'in_progress')} title="Send to Doctor Room">
-                                🚪 Send In
-                              </button>
+                              {a.status === 'in_progress' ? (
+                                <span className="badge badge-warning" style={{ padding: '4px 10px', fontSize: 12 }}>
+                                  🚪 In Doctor Room
+                                </span>
+                              ) : a.status === 'completed' ? (
+                                <span className="badge badge-gray" style={{ padding: '4px 10px', fontSize: 12 }}>
+                                  ✅ Completed
+                                </span>
+                              ) : (
+                                <button
+                                  className="btn btn-primary btn-sm"
+                                  onClick={() => openSendInModal(a)}
+                                  title="Send patient to Doctor's Consultation Room"
+                                >
+                                  🚪 Send In
+                                </button>
+                              )}
                             </td>
                           </tr>
                         ))}
@@ -283,47 +455,76 @@ export default function OpdQueuePage() {
                 </div>
               </div>
 
-              {/* Sidebar: Quick Entry for Registered Patients */}
-              <div className="card">
-                <div className="card-header">
-                  <span className="card-title">⚡ Quick Walk-in Entry</span>
-                </div>
-                <div className="card-body">
-                  <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-                    Click any recent patient to instantly book an OPD consultation slot.
-                  </p>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {(opdData.recentRegisteredPatients || []).slice(0, 8).map((p: any) => (
-                      <div
-                        key={p.id}
-                        style={{
-                          background: 'var(--bg-surface)',
-                          padding: 10,
-                          borderRadius: 8,
-                          border: '1px solid var(--border)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          fontSize: 12
-                        }}
-                      >
-                        <div>
-                          <div style={{ fontWeight: 700 }}>{p.firstName} {p.lastName}</div>
-                          <div style={{ fontSize: 10, color: '#0ea5e9', fontWeight: 600 }}>{p.opdTokenNumber || p.patientId}</div>
-                        </div>
-                        <button className="btn btn-primary btn-sm" onClick={() => openQuickAppt(p)}>
-                          + Book OPD
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
             </div>
           </>
         )}
       </div>
+
+      {/* Send In Modal to transfer patient to Doctor Room */}
+      {showSendInModal && sendInItem && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowSendInModal(false)}>
+          <div className="modal" style={{ maxWidth: 480 }}>
+            <div className="modal-header">
+              <h3>🚪 Send Patient to Consultation Room</h3>
+              <button className="btn btn-secondary btn-icon" onClick={() => setShowSendInModal(false)}>✕</button>
+            </div>
+            <form onSubmit={handleConfirmSendIn}>
+              <div className="modal-body">
+                <div style={{ background: 'var(--bg-surface)', padding: 12, borderRadius: 8, marginBottom: 16, border: '1px solid var(--border)' }}>
+                  <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--primary-light)' }}>
+                    {sendInItem.patientName}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    Patient ID: <strong>{sendInItem.patientId}</strong> • Dept: <strong>{sendInItem.department}</strong>
+                  </div>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 16 }}>
+                  <label className="form-label">Assigned Doctor *</label>
+                  <select
+                    className="form-control"
+                    value={sendInDoctorId}
+                    onChange={e => {
+                      const docId = e.target.value;
+                      setSendInDoctorId(docId);
+                      const d = doctors.find((doc: any) => doc.id === docId);
+                      if (d) setSendInDoctorName(`${d.firstName} ${d.lastName}`);
+                    }}
+                    required
+                  >
+                    <option value="">-- Select Attending Doctor --</option>
+                    {doctors.map((d: any) => (
+                      <option key={d.id} value={d.id}>
+                        Dr. {d.firstName} {d.lastName} ({d.department || 'General'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 16 }}>
+                  <label className="form-label">Consultation Notes / Reason</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Reason or token notes..."
+                    value={sendInNotes}
+                    onChange={e => setSendInNotes(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowSendInModal(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={sendingIn}>
+                  {sendingIn ? 'Sending In...' : '🚪 Send In to Doctor Room'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Quick Walk-in Appointment Modal */}
       {showQuickApptModal && (

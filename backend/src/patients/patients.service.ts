@@ -2,6 +2,7 @@ import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/commo
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Patient } from './patient.entity';
+import { Appointment, AppointmentStatus } from '../receptionist/appointment.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { HospitalConfig } from '../config/hospital.config';
 
@@ -15,10 +16,26 @@ export class PatientsService {
   constructor(
     @InjectRepository(Patient)
     private patientRepo: Repository<Patient>,
+    @InjectRepository(Appointment)
+    private appointmentRepo: Repository<Appointment>,
     private notificationsService: NotificationsService,
   ) {}
 
   async create(data: Partial<Patient>, createdById?: string) {
+    // Prevent duplicate patient creation if patient with same phone, first name, and last name exists
+    if (data.phone && data.firstName && data.lastName) {
+      const existing = await this.patientRepo.findOne({
+        where: {
+          phone: data.phone,
+          firstName: data.firstName,
+          lastName: data.lastName,
+        },
+      });
+      if (existing) {
+        return existing;
+      }
+    }
+
     const count = await this.patientRepo.count();
     const year = new Date().getFullYear().toString().slice(-2); // Get last 2 digits of year
     const seq = String(count + 1).padStart(6, '0');
@@ -33,6 +50,38 @@ export class PatientsService {
       admissionNumber,
     });
     const saved = await this.patientRepo.save(patient);
+
+    // Auto-create OPD Queue Appointment so patient appears in Receptionist Dashboard & OPD Queue Tokens
+    try {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const now = new Date();
+      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+      let docName = saved.assignedDoctorName || '';
+      if (docName.toLowerCase().startsWith('dr.')) {
+        docName = docName.replace(/^dr\.\s*/i, '');
+      }
+      if (!docName) {
+        docName = 'General OPD Doctor';
+      }
+
+      const appointment = this.appointmentRepo.create({
+        patientId: saved.patientId,
+        patientName: `${saved.firstName} ${saved.lastName}`,
+        doctorId: saved.assignedDoctorId || undefined,
+        doctorName: docName,
+        department: saved.department || 'General',
+        appointmentDate: todayStr,
+        appointmentTime: timeStr,
+        status: AppointmentStatus.SCHEDULED,
+        reason: saved.diagnosis || 'OPD Registration & Queue Token',
+        notes: `OPD Queue Token: ${saved.opdTokenNumber}`,
+        registeredBy: createdById,
+      });
+      await this.appointmentRepo.save(appointment);
+    } catch (err) {
+      // Non-blocking log if appointment creation encounters an issue
+    }
 
     // Generate idempotency key to prevent duplicate notifications
     const idempotencyKey = `patient-registration-${saved.id}-${Date.now()}`;
