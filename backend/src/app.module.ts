@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
@@ -25,21 +25,60 @@ import { DoctorModule } from './doctor/doctor.module';
         limit: 100,
       },
     ]),
-    TypeOrmModule.forRoot({
-      type: 'postgres',
-      host: process.env.DB_HOST || 'localhost',
-      port: parseInt(process.env.DB_PORT) || 5432,
-      username: process.env.DB_USERNAME || 'postgres',
-      password: process.env.DB_PASSWORD || 'postgres',
-      database: process.env.DB_NAME || 'hospital_db',
-      entities: [__dirname + '/**/*.entity{.ts,.js}'],
-      synchronize: true,
-      logging: false,
-      extra: {
-        max: 100,
-        min: 5,
-        idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 5000,
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => {
+        const databaseUrl = configService.get<string>('DATABASE_URL');
+        const dbSsl = configService.get<string>('DB_SSL');
+
+        const useSsl =
+          dbSsl === 'true' ||
+          (Boolean(databaseUrl) && dbSsl !== 'false') ||
+          configService.get<string>('NODE_ENV') === 'production';
+
+        const sslConfig = useSsl
+          ? {
+              rejectUnauthorized:
+                configService.get<string>('DB_SSL_REJECT_UNAUTHORIZED') === 'true',
+            }
+          : false;
+
+        if (databaseUrl) {
+          return {
+            type: 'postgres',
+            url: databaseUrl,
+            entities: [__dirname + '/**/*.entity{.ts,.js}'],
+            synchronize: true,
+            logging: false,
+            ssl: sslConfig,
+            extra: {
+              max: 100,
+              min: 5,
+              idleTimeoutMillis: 30000,
+              connectionTimeoutMillis: 5000,
+            },
+          };
+        }
+
+        return {
+          type: 'postgres',
+          host: configService.get<string>('DB_HOST', 'localhost'),
+          port: parseInt(configService.get<string>('DB_PORT', '5432'), 10),
+          username: configService.get<string>('DB_USERNAME', 'postgres'),
+          password: configService.get<string>('DB_PASSWORD', 'postgres'),
+          database: configService.get<string>('DB_NAME', 'hospital_db'),
+          entities: [__dirname + '/**/*.entity{.ts,.js}'],
+          synchronize: true,
+          logging: false,
+          ssl: sslConfig,
+          extra: {
+            max: 100,
+            min: 5,
+            idleTimeoutMillis: 30000,
+            connectionTimeoutMillis: 5000,
+          },
+        };
       },
     }),
     AuthModule,

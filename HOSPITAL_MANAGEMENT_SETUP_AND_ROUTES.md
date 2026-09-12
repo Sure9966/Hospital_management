@@ -3,9 +3,16 @@
 
 ---
 
-## 1. 🐘 PostgreSQL & pgAdmin 4 Database Setup
+## 1. 🐘 PostgreSQL Database Setup (Local & Render Cloud)
 
-### Database Configuration Details
+### Render Cloud PostgreSQL Integration
+* **Render Dashboard**: [https://dashboard.render.com/d/dpg-daidu5jm8hqs73cf8fq0-a](https://dashboard.render.com/d/dpg-daidu5jm8hqs73cf8fq0-a)
+* **Service ID**: `dpg-daidu5jm8hqs73cf8fq0-a`
+* **Dedicated Render Setup Guide**: See [`RENDER_DATABASE_SETUP.md`](file:///c:/Users/user/Documents/nextjs/RENDER_DATABASE_SETUP.md) for full configuration steps.
+
+---
+
+### Local PostgreSQL Configuration Details
 * **Host**: `localhost`
 * **Port**: `5432`
 * **Username**: `postgres`
