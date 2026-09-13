@@ -103,6 +103,14 @@ export class UsersService implements OnModuleInit {
         department: 'Management',
         phone: '123-456-7894',
       },
+      {
+        email: 'lab@hospital.com',
+        firstName: 'Senior',
+        lastName: 'Lab Technician',
+        role: UserRole.LAB_TECHNICIAN,
+        department: 'Laboratory',
+        phone: '123-456-7900',
+      },
     ];
 
     const hashedPassword = await bcrypt.hash('demo123', 10);

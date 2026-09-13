@@ -688,6 +688,39 @@ export class DoctorService {
       managerIdempotencyKey,
     );
 
+    // Real-time Receptionist notification
+    await this.notificationsService.sendToRole(
+      '🏥 Patient Discharged',
+      `${patient.firstName} ${patient.lastName} (${patient.patientId}) discharged. Update OPD queue / bed status.`,
+      'receptionist',
+      'patient_discharge',
+      patient.id,
+      undefined,
+      `discharge-receptionist-${patient.id}-${Date.now()}`,
+    );
+
+    // Real-time Pharmacist notification
+    await this.notificationsService.sendToRole(
+      '🏥 Patient Discharged',
+      `${patient.firstName} ${patient.lastName} (${patient.patientId}) discharged. Verify active medication orders.`,
+      'pharmacist',
+      'patient_discharge',
+      patient.id,
+      undefined,
+      `discharge-pharmacist-${patient.id}-${Date.now()}`,
+    );
+
+    // Real-time Lab Technician notification
+    await this.notificationsService.sendToRole(
+      '🏥 Patient Discharged',
+      `${patient.firstName} ${patient.lastName} (${patient.patientId}) discharged. Complete or mark pending lab samples.`,
+      'lab_technician',
+      'patient_discharge',
+      patient.id,
+      undefined,
+      `discharge-lab-${patient.id}-${Date.now()}`,
+    );
+
     return {
       message: 'Patient discharged successfully',
       patient,

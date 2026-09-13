@@ -54,6 +54,11 @@ const roleMenus: Record<string, { icon: string; label: string; href: string }[]>
     { icon: '📊', label: 'My Records', href: '/dashboard/patient' },
     { icon: '💊', label: 'Prescriptions', href: '/dashboard/patient/prescriptions' },
   ],
+  lab_technician: [
+    { icon: '📊', label: 'Lab Dashboard', href: '/dashboard/lab_technician' },
+    { icon: '🧪', label: 'Pending Requests', href: '/dashboard/lab_technician?tab=pending' },
+    { icon: '📋', label: 'Completed Results', href: '/dashboard/lab_technician?tab=completed' },
+  ],
 };
 
 export default function Sidebar({ role }: { role: string }) {
@@ -85,7 +90,7 @@ export default function Sidebar({ role }: { role: string }) {
 
   const roleColors: Record<string, string> = {
     admin: '#6366f1', receptionist: '#0ea5e9', nurse: '#10b981', doctor: '#ec4899',
-    pharmacist: '#f59e0b', management: '#ef4444', patient: '#8b5cf6',
+    pharmacist: '#f59e0b', management: '#ef4444', patient: '#8b5cf6', lab_technician: '#06b6d4',
   };
 
   return (

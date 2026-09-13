@@ -26,6 +26,7 @@ export default function LoginPage() {
     { role: 'receptionist', email: 'reception@hospital.com', label: 'Reception', icon: '📋' },
     { role: 'nurse', email: 'nurse@hospital.com', label: 'Nurse', icon: '💉' },
     { role: 'pharmacist', email: 'pharmacy@hospital.com', label: 'Pharmacy', icon: '💊' },
+    { role: 'lab_technician', email: 'lab@hospital.com', label: 'Lab Tech', icon: '🧪' },
   ];
 
   useEffect(() => {
@@ -48,7 +49,7 @@ export default function LoginPage() {
   };
 
   const handleQuickSelect = (email: string) => {
-    setForm({ email, password: 'password123' });
+    setForm({ email, password: 'demo123' });
     toast.success(`Pre-filled ${email}`);
   };
 

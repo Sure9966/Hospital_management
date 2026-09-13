@@ -162,7 +162,8 @@ All demo accounts share the standard password:
 | **Nurse** | `nurse@hospital.com` | `demo123` | Clinical Vitals, Triage Notes, Medical History |
 | **Doctor** | `doctor@hospital.com` | `demo123` | Doctor Management Dashboard, EHR Files, Consultations, Diagnosis, Test Orders, Prescriptions |
 | **Pharmacist** | `pharmacy@hospital.com` | `demo123` | Prescriptions, Medicine Dispensing |
-| **Management** | `manager@hospital.com` | `demo123` | Analytics, Revenue Reports, Staff Monitoring |
+| **Management** | `manager@hospital.com` | `demo123` | Analytics, Revenue Reports, Staff |
+| **Lab Technician** | `lab@hospital.com` | `demo123` | Lab Technician Dashboard, Test Results |
 
 ---
 

@@ -14,6 +14,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { FilesModule } from './files/files.module';
 import { BedsModule } from './beds/beds.module';
 import { DoctorModule } from './doctor/doctor.module';
+import { LabModule } from './lab/lab.module';
 
 @Module({
   imports: [
@@ -94,6 +95,7 @@ import { DoctorModule } from './doctor/doctor.module';
     FilesModule,
     BedsModule,
     DoctorModule,
+    LabModule,
   ],
   providers: [
     {

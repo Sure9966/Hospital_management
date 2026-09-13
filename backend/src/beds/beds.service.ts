@@ -2,6 +2,8 @@ import { Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Ward, Bed, BedStatus, Admission, AdmissionStatus } from './bed.entity';
+import { Patient, PatientStatus } from '../patients/patient.entity';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class BedsService implements OnModuleInit {
@@ -9,6 +11,8 @@ export class BedsService implements OnModuleInit {
     @InjectRepository(Ward) private wardRepo: Repository<Ward>,
     @InjectRepository(Bed) private bedRepo: Repository<Bed>,
     @InjectRepository(Admission) private admissionRepo: Repository<Admission>,
+    @InjectRepository(Patient) private patientRepo: Repository<Patient>,
+    private notificationsService: NotificationsService,
   ) { }
 
   async onModuleInit() {
@@ -170,6 +174,9 @@ export class BedsService implements OnModuleInit {
     const bed = await this.bedRepo.findOne({ where: { id: bedId } });
     if (!bed) throw new Error('Bed not found');
 
+    const patientId = bed.currentPatientId;
+    const patientName = bed.currentPatientName || 'Patient';
+
     // Update Bed to cleaning status post discharge
     bed.status = BedStatus.CLEANING;
     bed.currentPatientId = null;
@@ -184,6 +191,36 @@ export class BedsService implements OnModuleInit {
         admission.dischargedAt = new Date();
         await this.admissionRepo.save(admission);
       }
+    }
+
+    // Update Patient entity status to DISCHARGED
+    if (patientId) {
+      let patient = await this.patientRepo.findOne({ where: { patientId } });
+      if (!patient) {
+        patient = await this.patientRepo.findOne({ where: { id: patientId } });
+      }
+      if (patient) {
+        patient.status = PatientStatus.DISCHARGED;
+        patient.bedNumber = undefined;
+        patient.ward = undefined;
+        await this.patientRepo.save(patient);
+      }
+    }
+
+    // Broadcast patient discharge event to all portals (Receptionist, Nurse, Doctor, Pharmacist, Management, Lab)
+    const idempotencyKey = `discharge-${patientId || bedId}-${Date.now()}`;
+    const rolesToNotify = ['receptionist', 'nurse', 'doctor', 'pharmacist', 'management', 'lab_technician'];
+
+    for (const role of rolesToNotify) {
+      await this.notificationsService.sendToRole(
+        'Patient Discharged',
+        `Patient ${patientName} (${patientId || 'Inpatient'}) has been discharged. Bed ${bed.bedNumber} is now freed for sanitization.`,
+        role,
+        'discharge',
+        patientId || bedId,
+        undefined,
+        `${idempotencyKey}-${role}`,
+      );
     }
 
     return bed;
