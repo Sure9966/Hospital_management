@@ -6,7 +6,7 @@ import toast from 'react-hot-toast';
 import { useSearchParams } from 'next/navigation';
 import { getUser, User } from '@/lib/auth';
 
-const emptyPrescriptionItem = { medicineName: '', dosage: '1 tablet twice daily', duration: '5 days', quantity: 10, unitPrice: 15 };
+const emptyPrescriptionItem = { medicineName: '', power: '500mg', dosage: '1 tablet twice daily', duration: '5 days', quantity: 10, unitPrice: 15 };
 
 const emptyConsultationForm = {
   patientId: '',
@@ -29,6 +29,7 @@ export default function DoctorDashboard() {
   const [consultations, setConsultations] = useState<any[]>([]);
   const [prescriptions, setPrescriptions] = useState<any[]>([]);
   const [discharges, setDischarges] = useState<any[]>([]);
+  const [storeTablets, setStoreTablets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [showDischargeModal, setShowDischargeModal] = useState(false);
@@ -133,14 +134,16 @@ export default function DoctorDashboard() {
       api.get('/beds/admissions'),
       api.get('/pharmacy/prescriptions').catch(() => ({ data: [] })),
       api.get('/doctor/discharges').catch(() => ({ data: [] })),
+      api.get('/pharmacy/tablets').catch(() => ({ data: [] })),
     ])
-      .then(([patRes, vitRes, apptRes, consultRes, admRes, rxRes, dischargeRes]) => {
+      .then(([patRes, vitRes, apptRes, consultRes, admRes, rxRes, dischargeRes, tabletRes]) => {
         const patData = patRes.data || [];
         setPatients(patData);
         setVitals(vitRes.data || []);
         setAppointments(apptRes.data || []);
         setConsultations(consultRes.data || []);
         setDischarges(dischargeRes.data || []);
+        setStoreTablets(tabletRes.data || []);
 
         // Only show bed requests submitted for or by this doctor
         const myRequests = (admRes.data || []).filter((a: any) =>
@@ -312,14 +315,20 @@ export default function DoctorDashboard() {
       return;
     }
 
-    // ✅ Sanitize numbers (avoid NaN)
-    const medicines = validItems.map(i => ({
-      name: i.medicineName.trim(),
-      dosage: i.dosage?.trim() || 'As directed',
-      duration: i.duration?.trim() || '5 days',
-      quantity: Number(i.quantity) || 0,
-      unitCost: Number(i.unitPrice) || 0,
-    }));
+    // ✅ Sanitize numbers and calculate line totals
+    const medicines = validItems.map(i => {
+      const name = i.power && !i.medicineName.toLowerCase().includes(i.power.toLowerCase())
+        ? `${i.medicineName.trim()} (${i.power.trim()})`
+        : i.medicineName.trim();
+      return {
+        name,
+        dosage: i.dosage?.trim() || `${i.power || '500mg'} - As directed`,
+        duration: i.duration?.trim() || '5 days',
+        quantity: Number(i.quantity) || 1,
+        unitCost: Number(i.unitPrice) || 0,
+        lineTotal: (Number(i.quantity) || 1) * (Number(i.unitPrice) || 0),
+      };
+    });
 
     setSavingPrescription(true);
     try {
@@ -336,7 +345,6 @@ export default function DoctorDashboard() {
       setShowPrescriptionModal(false);
       loadData();
     } catch (err: any) {
-      // 🔎 Log the full backend error so you can see exactly which field failed
       console.error('Prescription error:', err.response?.data);
       toast.error(
         err.response?.data?.message ||
@@ -397,6 +405,34 @@ export default function DoctorDashboard() {
     setPrescriptionForm(f => {
       const next = [...f.items];
       next[idx] = { ...next[idx], [field]: value };
+      return { ...f, items: next };
+    });
+  };
+
+  const handleSelectTablet = (idx: number, val: string) => {
+    const matched = storeTablets.find(
+      t =>
+        t.name.toLowerCase() === val.toLowerCase() ||
+        `${t.name} ${t.power}`.toLowerCase() === val.toLowerCase() ||
+        val.toLowerCase().includes(t.name.toLowerCase())
+    );
+
+    setPrescriptionForm(f => {
+      const next = [...f.items];
+      if (matched) {
+        next[idx] = {
+          ...next[idx],
+          medicineName: matched.name,
+          power: matched.power || next[idx].power || '500mg',
+          unitPrice: Number(matched.price) || next[idx].unitPrice || 0,
+          dosage: `${matched.power || ''} - 1 tablet twice daily`,
+        };
+      } else {
+        next[idx] = {
+          ...next[idx],
+          medicineName: val,
+        };
+      }
       return { ...f, items: next };
     });
   };
@@ -1062,7 +1098,7 @@ export default function DoctorDashboard() {
       {/* MODAL 2: Create Prescription */}
       {showPrescriptionModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowPrescriptionModal(false)}>
-          <div className="modal" style={{ maxWidth: 720 }}>
+          <div className="modal" style={{ maxWidth: 880 }}>
             <div className="modal-header">
               <h3>💊 Create Patient Prescription</h3>
               <button className="btn btn-secondary btn-icon" onClick={() => setShowPrescriptionModal(false)}>✕</button>
@@ -1088,23 +1124,181 @@ export default function DoctorDashboard() {
                   </div>
                 </div>
 
+                {/* Quick Select Store Tablet Banner */}
+                {storeTablets.length > 0 && (
+                  <div style={{ background: 'var(--bg-surface)', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border)', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+                    <div style={{ fontSize: 13 }}>
+                      <strong>🏬 Pharmacy Store Inventory:</strong> {storeTablets.length} tablet types available in stock
+                    </div>
+                    <div className="flex gap-2">
+                      <select
+                        className="form-control form-control-sm"
+                        style={{ width: 270 }}
+                        onChange={e => {
+                          if (e.target.value) {
+                            const t = storeTablets.find(item => item.id === e.target.value);
+                            if (t) {
+                              setPrescriptionForm(f => ({
+                                ...f,
+                                items: [
+                                  ...f.items.filter(item => item.medicineName.trim() !== ''),
+                                  {
+                                    medicineName: t.name,
+                                    power: t.power,
+                                    dosage: `${t.power} - 1 tablet twice daily`,
+                                    duration: '5 days',
+                                    quantity: 10,
+                                    unitPrice: Number(t.price) || 0,
+                                  },
+                                ],
+                              }));
+                            }
+                            e.target.value = '';
+                          }
+                        }}
+                      >
+                        <option value="">+ Quick Pick Store Tablet...</option>
+                        {storeTablets.map(t => (
+                          <option key={t.id} value={t.id}>
+                            💊 {t.name} ({t.power}) - ₹{t.price} (Stock: {t.stockQuantity})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
+
                 <div style={{ marginBottom: 14 }}>
-                  <div className="flex justify-between items-center" style={{ marginBottom: 8 }}>
-                    <label className="form-label" style={{ margin: 0 }}>Prescribed Medicines</label>
+                  <div className="flex justify-between items-center" style={{ marginBottom: 10 }}>
+                    <label className="form-label" style={{ margin: 0, fontWeight: 700 }}>Prescribed Medicines & Costing</label>
                     <button type="button" className="btn btn-secondary btn-sm" onClick={addPrescriptionItem}>+ Add Medicine</button>
                   </div>
 
-                  {prescriptionForm.items.map((item, idx) => (
-                    <div key={idx} className="flex gap-2 items-center" style={{ marginBottom: 8, background: 'var(--bg-surface)', padding: 8, borderRadius: 8, border: '1px solid var(--border)' }}>
-                      <input className="form-control" placeholder="Medicine Name" value={item.medicineName} onChange={e => updateItem(idx, 'medicineName', e.target.value)} required style={{ flex: 2 }} />
-                      <input className="form-control" placeholder="Dosage" value={item.dosage} onChange={e => updateItem(idx, 'dosage', e.target.value)} style={{ flex: 2 }} />
-                      <input className="form-control" placeholder="Qty" type="number" value={item.quantity} onChange={e => updateItem(idx, 'quantity', e.target.value)} style={{ width: 70 }} />
-                      <input className="form-control" placeholder="Price ($)" type="number" value={item.unitPrice} onChange={e => updateItem(idx, 'unitPrice', e.target.value)} style={{ width: 80 }} />
-                      {prescriptionForm.items.length > 1 && (
-                        <button type="button" className="btn btn-secondary btn-icon" onClick={() => removePrescriptionItem(idx)}>✕</button>
-                      )}
+                  {/* Column Header Legend */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1.2fr auto', gap: 10, padding: '6px 12px', background: 'var(--bg-surface)', borderRadius: '6px 6px 0 0', border: '1px solid var(--border)', borderBottom: 'none', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>
+                    <div>NAME</div>
+                    <div>POWER</div>
+                    <div>UNIT PRICE</div>
+                    <div>NO OF UNITS</div>
+                    <div>TOTAL PRICE</div>
+                    <div>ACTION</div>
+                  </div>
+
+                  {prescriptionForm.items.map((item: any, idx: number) => {
+                    const lineTotal = ((Number(item.quantity) || 0) * (Number(item.unitPrice) || 0)).toFixed(2);
+                    return (
+                      <div key={idx} style={{ marginBottom: 10, padding: 12, border: '1px solid var(--border)', background: 'var(--bg-surface)', borderRadius: idx === 0 ? '0 0 8px 8px' : 8 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1.2fr auto', gap: 10, alignItems: 'center' }}>
+                          {/* 1. Name */}
+                          <div>
+                            <input
+                              list={`store-tablets-${idx}`}
+                              className="form-control"
+                              placeholder="Paracetamol"
+                              value={item.medicineName}
+                              onChange={e => handleSelectTablet(idx, e.target.value)}
+                              required
+                            />
+                            <datalist id={`store-tablets-${idx}`}>
+                              {storeTablets.map((t: any) => (
+                                <option key={t.id} value={`${t.name} ${t.power}`}>
+                                  ₹{t.price} | Stock: {t.stockQuantity} ({t.category || 'General'})
+                                </option>
+                              ))}
+                            </datalist>
+                          </div>
+
+                          {/* 2. Power */}
+                          <div>
+                            <input
+                              className="form-control"
+                              placeholder="500mg"
+                              value={item.power || ''}
+                              onChange={e => updateItem(idx, 'power', e.target.value)}
+                            />
+                          </div>
+
+                          {/* 3. Unit Price */}
+                          <div>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              className="form-control"
+                              placeholder="15.00"
+                              value={item.unitPrice}
+                              onChange={e => updateItem(idx, 'unitPrice', parseFloat(e.target.value) || 0)}
+                            />
+                          </div>
+
+                          {/* 4. No of Units */}
+                          <div>
+                            <input
+                              type="number"
+                              min="1"
+                              className="form-control"
+                              placeholder="10"
+                              value={item.quantity}
+                              onChange={e => updateItem(idx, 'quantity', parseInt(e.target.value) || 1)}
+                            />
+                          </div>
+
+                          {/* 5. Total Price */}
+                          <div>
+                            <div style={{ padding: '8px 12px', background: 'var(--bg-card)', borderRadius: 6, fontWeight: 700, color: '#38bdf8', fontSize: 13, border: '1px solid var(--border)', textAlign: 'right' }}>
+                              ${lineTotal}
+                            </div>
+                          </div>
+
+                          {/* Action */}
+                          <div>
+                            {prescriptionForm.items.length > 1 && (
+                              <button
+                                type="button"
+                                className="btn btn-danger btn-sm btn-icon"
+                                onClick={() => removePrescriptionItem(idx)}
+                                title="Remove Item"
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Dosage Frequency & Duration row */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 8, paddingTop: 8, borderTop: '1px dashed var(--border)' }}>
+                          <div className="flex items-center gap-2">
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Frequency:</span>
+                            <input
+                              className="form-control form-control-sm"
+                              placeholder="1 tablet twice daily"
+                              value={item.dosage}
+                              onChange={e => updateItem(idx, 'dosage', e.target.value)}
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Duration:</span>
+                            <input
+                              className="form-control form-control-sm"
+                              placeholder="5 days"
+                              value={item.duration}
+                              onChange={e => updateItem(idx, 'duration', e.target.value)}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* Total Summary Bar */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-card)', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border)', marginTop: 8 }}>
+                    <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-secondary)' }}>
+                      Prescribed Medicines: <strong>{prescriptionForm.items.length}</strong>
+                    </span>
+                    <div style={{ fontSize: 13 }}>
+                      Total Estimated Prescription Price: <strong style={{ color: '#38bdf8', fontSize: 15, marginLeft: 4 }}>${prescriptionForm.items.reduce((sum: number, item: any) => sum + ((Number(item.quantity) || 0) * (Number(item.unitPrice) || 0)), 0).toFixed(2)}</strong>
                     </div>
-                  ))}
+                  </div>
                 </div>
 
                 <div className="form-group">

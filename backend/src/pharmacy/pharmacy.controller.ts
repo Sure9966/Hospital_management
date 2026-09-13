@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Delete,
   Param,
   Body,
   UseGuards,
@@ -19,6 +20,7 @@ import {
   UpdatePrescriptionDto,
   DispensePrescriptionDto,
 } from './dto/prescription.dto';
+import { CreateTabletDto, UpdateTabletDto } from './dto/create-tablet.dto';
 
 @Controller('pharmacy')
 @UseGuards(JwtAuthGuard)
@@ -75,4 +77,29 @@ export class PharmacyController {
   update(@Param('id') id: string, @Body() dto: UpdatePrescriptionDto) {
     return this.pharmacyService.updatePrescription(id, dto);
   }
+
+  // --- TABLETS INVENTORY ENDPOINTS ---
+
+  @Get('tablets')
+  findAllTablets() {
+    return this.pharmacyService.findAllTablets();
+  }
+
+  @Post('tablets')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  createTablet(@Body() dto: CreateTabletDto) {
+    return this.pharmacyService.createTablet(dto);
+  }
+
+  @Put('tablets/:id')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  updateTablet(@Param('id') id: string, @Body() dto: UpdateTabletDto) {
+    return this.pharmacyService.updateTablet(id, dto);
+  }
+
+  @Delete('tablets/:id')
+  deleteTablet(@Param('id') id: string) {
+    return this.pharmacyService.deleteTablet(id);
+  }
 }
+

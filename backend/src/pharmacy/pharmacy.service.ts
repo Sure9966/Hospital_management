@@ -1,9 +1,11 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Prescription, PrescriptionStatus, BillingStatus } from './prescription.entity';
+import { Tablet } from './tablet.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreatePrescriptionDto, UpdatePrescriptionDto, DispensePrescriptionDto } from './dto/prescription.dto';
+import { CreateTabletDto, UpdateTabletDto } from './dto/create-tablet.dto';
 import * as PDFDocument from 'pdfkit';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -11,7 +13,7 @@ import * as crypto from 'crypto';
 import { Patient } from '../patients/patient.entity';
 
 @Injectable()
-export class PharmacyService {
+export class PharmacyService implements OnModuleInit {
   private readonly storageDir = path.join(process.cwd(), 'secure_storage', 'prescriptions');
 
   constructor(
@@ -19,11 +21,17 @@ export class PharmacyService {
     private prescriptionRepo: Repository<Prescription>,
     @InjectRepository(Patient)
     private patientRepo: Repository<Patient>,
+    @InjectRepository(Tablet)
+    private tabletRepo: Repository<Tablet>,
     private notificationsService: NotificationsService,
   ) {
     if (!fs.existsSync(this.storageDir)) {
       fs.mkdirSync(this.storageDir, { recursive: true });
     }
+  }
+
+  async onModuleInit() {
+    await this.seedInitialTablets();
   }
 
   // private async validatePatient(patientId: string, patientName: string) {
@@ -547,5 +555,70 @@ export class PharmacyService {
       mimeType: 'application/pdf',
       size: fs.statSync(fullPath).size,
     };
+  }
+
+  // --- STORE TABLET INVENTORY MANAGEMENT ---
+
+  private async seedInitialTablets() {
+    try {
+      const count = await this.tabletRepo.count();
+      if (count === 0) {
+        const initialTablets = [
+          { name: 'Paracetamol', power: '500mg', price: 15.00, mfgDate: '2025-01-10', expiryDate: '2027-01-10', stockQuantity: 1000, category: 'Analgesic / Antipyretic', manufacturer: 'Sun Pharma' },
+          { name: 'Paracetamol', power: '650mg', price: 20.00, mfgDate: '2025-02-01', expiryDate: '2027-02-01', stockQuantity: 800, category: 'Analgesic / Antipyretic', manufacturer: 'Micro Labs' },
+          { name: 'Amoxicillin', power: '250mg', price: 45.00, mfgDate: '2025-01-15', expiryDate: '2026-08-15', stockQuantity: 450, category: 'Antibiotic', manufacturer: 'Cipla' },
+          { name: 'Amoxicillin', power: '500mg', price: 85.00, mfgDate: '2025-03-01', expiryDate: '2026-11-01', stockQuantity: 300, category: 'Antibiotic', manufacturer: 'Cipla' },
+          { name: 'Ibuprofen', power: '200mg', price: 18.00, mfgDate: '2024-11-20', expiryDate: '2026-11-20', stockQuantity: 600, category: 'NSAID / Anti-inflammatory', manufacturer: 'Abbott' },
+          { name: 'Ibuprofen', power: '400mg', price: 28.00, mfgDate: '2025-02-10', expiryDate: '2027-02-10', stockQuantity: 500, category: 'NSAID / Anti-inflammatory', manufacturer: 'Abbott' },
+          { name: 'Azithromycin', power: '500mg', price: 120.00, mfgDate: '2025-01-05', expiryDate: '2027-01-05', stockQuantity: 350, category: 'Antibiotic', manufacturer: 'Zydus' },
+          { name: 'Cetirizine', power: '10mg', price: 12.00, mfgDate: '2024-10-12', expiryDate: '2026-10-12', stockQuantity: 900, category: 'Antihistamine', manufacturer: 'Dr. Reddy' },
+          { name: 'Pantoprazole', power: '40mg', price: 38.00, mfgDate: '2025-01-25', expiryDate: '2027-01-25', stockQuantity: 400, category: 'Antacid / PPI', manufacturer: 'Mankind' },
+          { name: 'Metformin', power: '500mg', price: 22.00, mfgDate: '2024-12-01', expiryDate: '2026-12-01', stockQuantity: 750, category: 'Antidiabetic', manufacturer: 'Torrent Pharma' },
+        ];
+        await this.tabletRepo.save(initialTablets);
+      }
+    } catch (e) {
+      // Ignore seeding errors on boot
+    }
+  }
+
+  async findAllTablets() {
+    return this.tabletRepo.find({
+      order: { name: 'ASC', power: 'ASC' },
+    });
+  }
+
+  async findOneTablet(id: string) {
+    const tablet = await this.tabletRepo.findOne({ where: { id } });
+    if (!tablet) {
+      throw new NotFoundException(`Tablet with ID ${id} not found`);
+    }
+    return tablet;
+  }
+
+  async createTablet(dto: CreateTabletDto) {
+    const tablet = this.tabletRepo.create({
+      name: dto.name,
+      power: dto.power,
+      price: dto.price,
+      mfgDate: dto.mfgDate,
+      expiryDate: dto.expiryDate,
+      stockQuantity: dto.stockQuantity,
+      category: dto.category || 'General',
+      manufacturer: dto.manufacturer || 'Standard Pharma',
+    });
+    return this.tabletRepo.save(tablet);
+  }
+
+  async updateTablet(id: string, dto: UpdateTabletDto) {
+    const tablet = await this.findOneTablet(id);
+    Object.assign(tablet, dto);
+    return this.tabletRepo.save(tablet);
+  }
+
+  async deleteTablet(id: string) {
+    const tablet = await this.findOneTablet(id);
+    await this.tabletRepo.remove(tablet);
+    return { success: true, message: `Tablet ${tablet.name} (${tablet.power}) deleted successfully` };
   }
 }
