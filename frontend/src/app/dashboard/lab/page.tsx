@@ -112,11 +112,12 @@ export default function LabDashboard() {
   };
 
   // Metrics
+  // Metrics
   const totalCount = labTests.length;
-  const pendingCount = labTests.filter((t) => t.status === 'PENDING').length;
-  const inProgressCount = labTests.filter((t) => t.status === 'IN_PROGRESS').length;
-  const completedCount = labTests.filter((t) => t.status === 'COMPLETED').length;
-  const urgentCount = labTests.filter((t) => t.priority === 'URGENT').length;
+  const pendingCount = labTests.filter((t) => (t.status || '').toUpperCase() === 'PENDING').length;
+  const inProgressCount = labTests.filter((t) => (t.status || '').toUpperCase() === 'IN_PROGRESS').length;
+  const completedCount = labTests.filter((t) => (t.status || '').toUpperCase() === 'COMPLETED').length;
+  const urgentCount = labTests.filter((t) => (t.priority || '').toUpperCase() === 'URGENT').length;
 
   // Filtered List
   const filteredTests = labTests.filter((t) => {
@@ -128,10 +129,13 @@ export default function LabDashboard() {
 
     if (!matchesSearch) return false;
 
-    if (activeTab === 'pending') return t.status === 'PENDING';
-    if (activeTab === 'in_progress') return t.status === 'IN_PROGRESS';
-    if (activeTab === 'completed') return t.status === 'COMPLETED';
-    if (activeTab === 'urgent') return t.priority === 'URGENT';
+    const statusUpper = (t.status || '').toUpperCase();
+    const priorityUpper = (t.priority || '').toUpperCase();
+
+    if (activeTab === 'pending') return statusUpper === 'PENDING';
+    if (activeTab === 'in_progress') return statusUpper === 'IN_PROGRESS';
+    if (activeTab === 'completed') return statusUpper === 'COMPLETED';
+    if (activeTab === 'urgent') return priorityUpper === 'URGENT';
     return true;
   });
 
@@ -176,7 +180,7 @@ export default function LabDashboard() {
           </button>
         </div>
 
-        {/* Metric Cards */}
+        {/* Metric Cards - Interactive Tabs */}
         <div
           style={{
             display: 'grid',
@@ -185,24 +189,74 @@ export default function LabDashboard() {
             marginBottom: '28px',
           }}
         >
-          <div className="stat-card" style={{ borderLeft: '4px solid #06b6d4' }}>
+          <div
+            className="stat-card"
+            onClick={() => setActiveTab('all')}
+            style={{
+              borderLeft: '4px solid #06b6d4',
+              cursor: 'pointer',
+              boxShadow: activeTab === 'all' ? '0 0 0 2px #06b6d4, 0 4px 12px rgba(6,182,212,0.2)' : undefined,
+              transform: activeTab === 'all' ? 'translateY(-2px)' : undefined,
+              transition: 'all 0.2s ease',
+            }}
+          >
             <div className="stat-value">{totalCount}</div>
             <div className="stat-label">Total Lab Orders</div>
           </div>
-          <div className="stat-card" style={{ borderLeft: '4px solid #f59e0b' }}>
-            <div className="stat-value">{pendingCount}</div>
+          <div
+            className="stat-card"
+            onClick={() => setActiveTab('pending')}
+            style={{
+              borderLeft: '4px solid #f59e0b',
+              cursor: 'pointer',
+              boxShadow: activeTab === 'pending' ? '0 0 0 2px #f59e0b, 0 4px 12px rgba(245,158,11,0.2)' : undefined,
+              transform: activeTab === 'pending' ? 'translateY(-2px)' : undefined,
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <div className="stat-value" style={{ color: activeTab === 'pending' ? '#d97706' : undefined }}>{pendingCount}</div>
             <div className="stat-label">Pending Samples</div>
           </div>
-          <div className="stat-card" style={{ borderLeft: '4px solid #3b82f6' }}>
-            <div className="stat-value">{inProgressCount}</div>
+          <div
+            className="stat-card"
+            onClick={() => setActiveTab('in_progress')}
+            style={{
+              borderLeft: '4px solid #3b82f6',
+              cursor: 'pointer',
+              boxShadow: activeTab === 'in_progress' ? '0 0 0 2px #3b82f6, 0 4px 12px rgba(59,130,246,0.2)' : undefined,
+              transform: activeTab === 'in_progress' ? 'translateY(-2px)' : undefined,
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <div className="stat-value" style={{ color: activeTab === 'in_progress' ? '#2563eb' : undefined }}>{inProgressCount}</div>
             <div className="stat-label">Testing In-Progress</div>
           </div>
-          <div className="stat-card" style={{ borderLeft: '4px solid #10b981' }}>
-            <div className="stat-value">{completedCount}</div>
+          <div
+            className="stat-card"
+            onClick={() => setActiveTab('completed')}
+            style={{
+              borderLeft: '4px solid #10b981',
+              cursor: 'pointer',
+              boxShadow: activeTab === 'completed' ? '0 0 0 2px #10b981, 0 4px 12px rgba(16,185,129,0.2)' : undefined,
+              transform: activeTab === 'completed' ? 'translateY(-2px)' : undefined,
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <div className="stat-value" style={{ color: activeTab === 'completed' ? '#059669' : undefined }}>{completedCount}</div>
             <div className="stat-label">Completed Today</div>
           </div>
-          <div className="stat-card" style={{ borderLeft: '4px solid #ef4444' }}>
-            <div className="stat-value">{urgentCount}</div>
+          <div
+            className="stat-card"
+            onClick={() => setActiveTab('urgent')}
+            style={{
+              borderLeft: '4px solid #ef4444',
+              cursor: 'pointer',
+              boxShadow: activeTab === 'urgent' ? '0 0 0 2px #ef4444, 0 4px 12px rgba(239,68,68,0.2)' : undefined,
+              transform: activeTab === 'urgent' ? 'translateY(-2px)' : undefined,
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <div className="stat-value" style={{ color: activeTab === 'urgent' ? '#dc2626' : undefined }}>{urgentCount}</div>
             <div className="stat-label">Urgent Priority</div>
           </div>
         </div>

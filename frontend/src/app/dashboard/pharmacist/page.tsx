@@ -139,7 +139,12 @@ export default function PharmacistDashboard() {
     return `badge ${m[s] || 'badge-gray'}`;
   };
 
-  const shownPrescriptions = tab === 'pending' ? prescriptions.filter(p => p.status === 'pending' || p.status === 'processing') : prescriptions;
+  const shownPrescriptions = tab === 'pending'
+    ? prescriptions.filter(p => {
+        const s = (p.status || '').toLowerCase();
+        return s === 'pending' || s === 'processing';
+      })
+    : prescriptions;
 
   const filteredTablets = tablets.filter(t => {
     const q = tabletSearch.toLowerCase();

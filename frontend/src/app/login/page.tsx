@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
-import { setAuth } from '@/lib/auth';
+import { setAuth, getUser, isLoggedIn } from '@/lib/auth';
 import toast from 'react-hot-toast';
 import CenteredLoader from '@/components/CenteredLoader';
 import { applyTheme, getCurrentTheme } from '@/lib/theme';
@@ -31,8 +31,16 @@ export default function LoginPage() {
 
   useEffect(() => {
     applyTheme(getCurrentTheme());
+    if (isLoggedIn()) {
+      const user = getUser();
+      if (user?.role) {
+        const target = (user.role === 'lab_technician' || user.role === 'lab') ? '/dashboard/lab' : `/dashboard/${user.role}`;
+        router.replace(target);
+        return;
+      }
+    }
     setPageInitializing(false);
-  }, []);
+  }, [router]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();

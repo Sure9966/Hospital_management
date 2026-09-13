@@ -31,10 +31,20 @@ export default function DashboardLayout({
     if (!token || !user) {
       router.push('/login');
     } else {
+      const userRole = user.role;
+      const isLabMatch = (role === 'lab_technician' || role === 'lab') && (userRole === 'lab_technician' || userRole === 'lab');
+      const isRoleAllowed = userRole === 'admin' || userRole === role || isLabMatch;
+
+      if (!isRoleAllowed) {
+        const userDashboard = (userRole === 'lab_technician' || userRole === 'lab') ? '/dashboard/lab' : `/dashboard/${userRole}`;
+        router.replace(userDashboard);
+        return;
+      }
+
       setCurrentUser(user);
       setLoading(false);
     }
-  }, [router]);
+  }, [router, role]);
 
   if (loading) {
     return <CenteredLoader message="Loading MediCore Dashboard..." subtext="Verifying security credentials & hospital theme" />;
