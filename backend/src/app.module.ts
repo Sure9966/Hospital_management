@@ -53,10 +53,11 @@ import { DoctorModule } from './doctor/doctor.module';
             logging: false,
             ssl: sslConfig,
             extra: {
-              max: 100,
-              min: 5,
+              max: 20,
+              min: 0,
               idleTimeoutMillis: 30000,
-              connectionTimeoutMillis: 5000,
+              connectionTimeoutMillis: 30000,
+              keepAlive: true,
             },
           };
         }
@@ -73,10 +74,11 @@ import { DoctorModule } from './doctor/doctor.module';
           logging: false,
           ssl: sslConfig,
           extra: {
-            max: 100,
-            min: 5,
+            max: 20,
+            min: 0,
             idleTimeoutMillis: 30000,
-            connectionTimeoutMillis: 5000,
+            connectionTimeoutMillis: 30000,
+            keepAlive: true,
           },
         };
       },
