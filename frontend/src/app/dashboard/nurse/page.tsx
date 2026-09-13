@@ -39,12 +39,16 @@ export default function NurseDashboard() {
   const [activeTab, setActiveTab] = useState<'vitals' | 'triage' | 'history' | 'reports' | 'discharges'>('vitals');
   const [searchQuery, setSearchQuery] = useState('');
   const [dischargeSummaries, setDischargeSummaries] = useState<any[]>([]);
+  const [labTests, setLabTests] = useState<any[]>([]);
 
   const load = () => api.get('/nurse/vitals').then(r => setVitals(r.data));
   const loadDischarges = () => api.get('/nurse/discharges').then(r => setDischargeSummaries(r.data));
+  const loadLabTests = () => api.get('/lab').then(r => setLabTests(r.data)).catch(() => []);
+
   useEffect(() => {
     load();
     loadDischarges();
+    loadLabTests();
     api.get('/management/dashboard').then(r => setStats(r.data));
   }, []);
 
@@ -60,7 +64,9 @@ export default function NurseDashboard() {
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault(); setLoading(true);
+    e.preventDefault();
+    if (loading) return;
+    setLoading(true);
     const status = autoStatus(form);
     try {
       await api.post('/nurse/vitals', { ...form, status });
@@ -305,39 +311,90 @@ export default function NurseDashboard() {
         {/* TAB 4: Test Reports Overview */}
         {activeTab === 'reports' && (
           <div className="card">
-            <div className="card-header">
-              <span className="card-title">🧪 Laboratory & Radiology Test Reports Overview</span>
+            <div className="card-header flex justify-between items-center" style={{ flexWrap: 'wrap', gap: 12 }}>
+              <span className="card-title">🧪 Live Patient Lab & Radiology Diagnostic Reports ({labTests.length})</span>
+              <button className="btn btn-secondary btn-sm" onClick={loadLabTests}>🔄 Refresh Reports</button>
             </div>
             <div className="table-container">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Report ID</th>
-                    <th>Patient Name</th>
-                    <th>Test Title</th>
-                    <th>Category</th>
-                    <th>Status Badge</th>
-                    <th>Report Summary</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[
-                    { id: 'REP-101', patient: 'John Doe', title: 'Complete Blood Count (CBC)', cat: 'Hematology', status: 'Normal', note: 'Hb 14.2 g/dL, WBC 6,800/uL, Normal platelet count' },
-                    { id: 'REP-102', patient: 'Sarah Connor', title: 'Comprehensive Metabolic Panel', cat: 'Biochemistry', status: 'Reviewed', note: 'Fasting Glucose 95 mg/dL, Normal renal and liver enzymes' },
-                    { id: 'REP-103', patient: 'Michael Scott', title: 'Chest X-Ray PA View', cat: 'Radiology', status: 'Clear', note: 'Clear lung fields, no cardiac enlargement' },
-                    { id: 'REP-104', patient: 'Emma Watson', title: 'ECG 12-Lead Rhythm', cat: 'Cardiology', status: 'Normal', note: 'Normal Sinus Rhythm 72 bpm, no ST elevation' },
-                  ].map(r => (
-                    <tr key={r.id}>
-                      <td><strong>{r.id}</strong></td>
-                      <td>{r.patient}</td>
-                      <td>{r.title}</td>
-                      <td><span className="badge badge-info">{r.cat}</span></td>
-                      <td><span className="badge badge-success">{r.status}</span></td>
-                      <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{r.note}</td>
+              {labTests.length === 0 ? (
+                <div className="empty-state">
+                  <div className="empty-icon">🧪</div>
+                  <h3>No lab test orders found</h3>
+                  <p>Laboratory and diagnostic orders requested by doctors will be listed here with live sample and report status tracking.</p>
+                </div>
+              ) : (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Patient Name & ID</th>
+                      <th>Test Title & Category</th>
+                      <th>Sample Type</th>
+                      <th>Priority</th>
+                      <th>Live Lab Status</th>
+                      <th>Lab Findings & Summary</th>
+                      <th>Order Date</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {labTests.map(t => {
+                      const isDischarged = t.patientStatus === 'discharged';
+                      return (
+                        <tr key={t.id} style={{ backgroundColor: isDischarged ? 'rgba(239, 68, 68, 0.03)' : 'transparent' }}>
+                          <td>
+                            <strong>{t.patientName}</strong>
+                            <br /><span className="text-muted text-xs">{t.patientId}</span>
+                            {isDischarged && (
+                              <div>
+                                <span className="badge badge-danger" style={{ fontSize: 9, marginTop: 2 }}>DISCHARGED</span>
+                              </div>
+                            )}
+                          </td>
+                          <td>
+                            <strong>{t.testName}</strong>
+                            <br /><span className="badge badge-info">{t.category || 'Pathology'}</span>
+                          </td>
+                          <td>
+                            <span className="badge badge-secondary">🩸 {t.sampleType || 'Blood'}</span>
+                          </td>
+                          <td>
+                            <span className={t.priority === 'URGENT' ? 'badge badge-danger' : 'badge badge-info'}>
+                              {t.priority === 'URGENT' ? '🔥 URGENT' : '🟢 NORMAL'}
+                            </span>
+                          </td>
+                          <td>
+                            <span className={t.status === 'COMPLETED' ? 'badge badge-success' : t.status === 'IN_PROGRESS' ? 'badge badge-warning' : 'badge badge-gray'}>
+                              {t.status === 'COMPLETED' && '✅ COMPLETED'}
+                              {t.status === 'IN_PROGRESS' && '🔬 IN PROGRESS'}
+                              {t.status === 'PENDING' && '⏳ PENDING'}
+                              {t.status === 'CANCELLED' && '❌ CANCELLED'}
+                            </span>
+                          </td>
+                          <td style={{ maxWidth: 280 }}>
+                            {t.resultSummary ? (
+                              <div>
+                                <div style={{ fontSize: 12, color: 'var(--text-main)', fontWeight: 600 }}>{t.resultSummary}</div>
+                                {t.reportUrl && (
+                                  <a
+                                    href={t.reportUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    style={{ fontSize: 11, color: '#0284c7', textDecoration: 'underline', marginTop: 2, display: 'inline-block' }}
+                                  >
+                                    📄 View Official Lab Report
+                                  </a>
+                                )}
+                              </div>
+                            ) : (
+                              <span style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>Awaiting lab processing...</span>
+                            )}
+                          </td>
+                          <td>{new Date(t.createdAt || Date.now()).toLocaleDateString()}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         )}

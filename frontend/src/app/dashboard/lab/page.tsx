@@ -50,6 +50,7 @@ export default function LabDashboard() {
 
   const handleOrderSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     if (!orderForm.patientId || !orderForm.patientName || !orderForm.testName) {
       toast.error('Patient ID, Patient Name, and Test Name are required!');
       return;
@@ -89,6 +90,7 @@ export default function LabDashboard() {
 
   const handleResultSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     if (!selectedTest) return;
     if (!resultForm.resultSummary) {
       toast.error('Please enter a result summary');

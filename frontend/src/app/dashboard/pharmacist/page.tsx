@@ -45,7 +45,9 @@ export default function PharmacistDashboard() {
   const removeMed = (i: number) => setMedicines(ms => ms.filter((_, idx) => idx !== i));
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault(); setLoading(true);
+    e.preventDefault();
+    if (loading) return;
+    setLoading(true);
     try {
       await api.post('/pharmacy/prescriptions', { ...form, medicines });
       toast.success('💊 Prescription created! Pharmacist notified.');
@@ -56,6 +58,7 @@ export default function PharmacistDashboard() {
   };
 
   const handleDispense = async () => {
+    if (loading) return;
     setLoading(true);
     try {
       await api.put(`/pharmacy/prescriptions/${showDispenseModal.id}/dispense`, { totalCost: parseFloat(totalCost) || 0 });
@@ -90,6 +93,7 @@ export default function PharmacistDashboard() {
 
   const handleSaveTablet = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setLoading(true);
     try {
       const payload = {

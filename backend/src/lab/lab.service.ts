@@ -78,6 +78,22 @@ export class LabService implements OnModuleInit {
   }
 
   async create(data: Partial<LabTest>, createdById?: string): Promise<LabTest> {
+    if (data.patientId && data.testName) {
+      // Prevent duplicate active test orders for the same patient and test name
+      const existing = await this.labRepo.findOne({
+        where: {
+          patientId: data.patientId,
+          testName: data.testName,
+        },
+        order: { createdAt: 'DESC' },
+      });
+
+      if (existing && (existing.status === LabTestStatus.PENDING || existing.status === LabTestStatus.IN_PROGRESS)) {
+        console.log(`⚠️ Prevented duplicate lab test order for ${data.patientId} - ${data.testName}`);
+        return existing;
+      }
+    }
+
     // Sync patient status from Patient entity if available
     let patientStatus = data.patientStatus;
     if (data.patientId) {
@@ -188,7 +204,7 @@ export class LabService implements OnModuleInit {
     const saved = await this.labRepo.save(test);
 
     // Notify doctor & nurse on status change
-    const idempotencyKey = `lab-status-${saved.id}-${Date.now()}`;
+    const timestamp = Date.now();
     await this.notificationsService.sendToRole(
       `Lab Test ${status}`,
       `Lab Test "${saved.testName}" for ${saved.patientName} (${saved.patientId}) is now ${status}.`,
@@ -196,7 +212,17 @@ export class LabService implements OnModuleInit {
       'lab',
       saved.id,
       updatedBy,
-      idempotencyKey,
+      `lab-status-doc-${saved.id}-${timestamp}`,
+    );
+
+    await this.notificationsService.sendToRole(
+      `Lab Test ${status}`,
+      `Lab Test "${saved.testName}" for ${saved.patientName} (${saved.patientId}) is now ${status}.`,
+      'nurse',
+      'lab',
+      saved.id,
+      updatedBy,
+      `lab-status-nurse-${saved.id}-${timestamp}`,
     );
 
     return saved;
@@ -219,7 +245,7 @@ export class LabService implements OnModuleInit {
     const saved = await this.labRepo.save(test);
 
     // Notify Doctor & Nurse that test results are ready
-    const idempotencyKey = `lab-result-${saved.id}-${Date.now()}`;
+    const timestamp = Date.now();
     await this.notificationsService.sendToRole(
       'Lab Results Ready',
       `Results uploaded for "${saved.testName}" (Patient: ${saved.patientName}).`,
@@ -227,7 +253,7 @@ export class LabService implements OnModuleInit {
       'lab',
       saved.id,
       completedBy,
-      idempotencyKey,
+      `lab-result-doctor-${saved.id}-${timestamp}`,
     );
 
     await this.notificationsService.sendToRole(
@@ -237,7 +263,7 @@ export class LabService implements OnModuleInit {
       'lab',
       saved.id,
       completedBy,
-      idempotencyKey,
+      `lab-result-nurse-${saved.id}-${timestamp}`,
     );
 
     return saved;

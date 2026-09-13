@@ -65,6 +65,7 @@ export default function AdminUsersPage() {
   };
 
   const handleDeleteUser = async (user: UserItem) => {
+    if (actionLoading) return;
     setActionLoading(true);
     try {
       await api.delete(`/users/${user.id}`);
@@ -80,7 +81,7 @@ export default function AdminUsersPage() {
 
   const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editUser) return;
+    if (actionLoading || !editUser) return;
     setActionLoading(true);
     try {
       await api.put(`/users/${editUser.id}`, {

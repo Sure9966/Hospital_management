@@ -14,6 +14,7 @@ const emptyConsultationForm = {
   consultationNotes: '',
   diagnosis: '',
   testOrders: '',
+  labPriority: 'NORMAL',
   followUpDate: '',
   followUpInstructions: '',
   status: 'in_progress',
@@ -30,6 +31,7 @@ export default function DoctorDashboard() {
   const [prescriptions, setPrescriptions] = useState<any[]>([]);
   const [discharges, setDischarges] = useState<any[]>([]);
   const [storeTablets, setStoreTablets] = useState<any[]>([]);
+  const [labTests, setLabTests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [showDischargeModal, setShowDischargeModal] = useState(false);
@@ -135,8 +137,9 @@ export default function DoctorDashboard() {
       api.get('/pharmacy/prescriptions').catch(() => ({ data: [] })),
       api.get('/doctor/discharges').catch(() => ({ data: [] })),
       api.get('/pharmacy/tablets').catch(() => ({ data: [] })),
+      api.get('/lab').catch(() => ({ data: [] })),
     ])
-      .then(([patRes, vitRes, apptRes, consultRes, admRes, rxRes, dischargeRes, tabletRes]) => {
+      .then(([patRes, vitRes, apptRes, consultRes, admRes, rxRes, dischargeRes, tabletRes, labRes]) => {
         const patData = patRes.data || [];
         setPatients(patData);
         setVitals(vitRes.data || []);
@@ -144,6 +147,7 @@ export default function DoctorDashboard() {
         setConsultations(consultRes.data || []);
         setDischarges(dischargeRes.data || []);
         setStoreTablets(tabletRes.data || []);
+        setLabTests(labRes.data || []);
 
         // Only show bed requests submitted for or by this doctor
         const myRequests = (admRes.data || []).filter((a: any) =>
@@ -208,6 +212,7 @@ export default function DoctorDashboard() {
 
   const handleDischargeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (savingDischarge) return;
     setSavingDischarge(true);
 
     try {
@@ -246,13 +251,31 @@ export default function DoctorDashboard() {
     }
   };
 
+  const toggleTestOrder = (testName: string) => {
+    const current = consultForm.testOrders
+      ? consultForm.testOrders.split(',').map(s => s.trim()).filter(Boolean)
+      : [];
+    let updated: string[];
+    if (current.includes(testName)) {
+      updated = current.filter(t => t !== testName);
+    } else {
+      updated = [...current, testName];
+    }
+    setConsultForm(f => ({ ...f, testOrders: updated.join(', ') }));
+  };
+
   const handleSaveConsultation = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (savingConsult) return;
     setSavingConsult(true);
     try {
+      const testList = consultForm.testOrders
+        ? consultForm.testOrders.split(',').map(s => s.trim()).filter(Boolean)
+        : [];
+
       const payload = {
         ...consultForm,
-        testOrders: consultForm.testOrders ? consultForm.testOrders.split(',').map(s => s.trim()) : [],
+        testOrders: testList,
       };
       await api.post('/doctor/consultations', payload);
 
@@ -262,7 +285,44 @@ export default function DoctorDashboard() {
         });
       }
 
-      toast.success('✅ Consultation Notes & Medical Orders Saved!');
+      // Automatically dispatch 1 single consolidated Lab Test order to Lab Module API
+      if (testList.length > 0 && consultForm.patientId) {
+        const uniqueTests = Array.from(new Set(testList));
+        const combinedTestName = uniqueTests.join(', ');
+        let category = 'Pathology';
+        let sampleType = 'Blood / Diagnostic';
+        const lower = combinedTestName.toLowerCase();
+        if (lower.includes('x-ray') || lower.includes('ct') || lower.includes('mri') || lower.includes('ultrasound') || lower.includes('usg')) {
+          category = 'Radiology & Pathology';
+          sampleType = 'Blood / Imaging';
+        } else if (lower.includes('urine') || lower.includes('urinalysis')) {
+          category = 'Microbiology';
+          sampleType = 'Urine / Sample';
+        } else if (lower.includes('lipid') || lower.includes('lft') || lower.includes('kft') || lower.includes('creatinine') || lower.includes('sugar') || lower.includes('fbs')) {
+          category = 'Biochemistry';
+          sampleType = 'Blood';
+        }
+
+        try {
+          await api.post('/lab', {
+            patientId: consultForm.patientId,
+            patientName: consultForm.patientName,
+            doctorName: doctorFullName,
+            doctorId,
+            testName: combinedTestName,
+            category,
+            sampleType,
+            priority: consultForm.labPriority || 'NORMAL',
+            notes: `Ordered in Consultation: ${consultForm.diagnosis || 'Clinical Orders'}`,
+          });
+          toast.success('🧪 Dispatched 1 Lab Order to Lab Portal & Nurses!');
+        } catch (err) {
+          console.warn('Lab order dispatch warning:', err);
+        }
+      } else {
+        toast.success('✅ Consultation Notes Saved!');
+      }
+
       setShowConsultModal(false);
       setConsultForm({ ...emptyConsultationForm });
       loadData();
@@ -273,37 +333,9 @@ export default function DoctorDashboard() {
     }
   };
 
-  // const handleSavePrescription = async (e: React.FormEvent) => {
-  //   e.preventDefault();
-  //   setSavingPrescription(true);
-  //   try {
-  //     // Map frontend items (medicineName/unitPrice) → backend medicines (name/unitCost)
-  //     const medicines = prescriptionForm.items.map(i => ({
-  //       name: i.medicineName,
-  //       dosage: i.dosage,
-  //       duration: i.duration,
-  //       quantity: Number(i.quantity),
-  //       unitCost: Number(i.unitPrice),
-  //       lineTotal: Number(i.quantity) * Number(i.unitPrice),
-  //     }));
-  //     await api.post('/pharmacy/prescriptions', {
-  //       patientId: prescriptionForm.patientId,
-  //       patientName: prescriptionForm.patientName,
-  //       doctorName: prescriptionForm.doctorName,
-  //       notes: prescriptionForm.notes,
-  //       medicines,
-  //     });
-  //     toast.success('💊 Prescription created and sent to Pharmacy!');
-  //     setShowPrescriptionModal(false);
-  //     loadData();
-  //   } catch (err: any) {
-  //     toast.error(err.response?.data?.message || 'Error creating prescription');
-  //   } finally {
-  //     setSavingPrescription(false);
-  //   }
-  // };
   const handleSavePrescription = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (savingPrescription) return;
 
     // ✅ Validate items first
     const validItems = prescriptionForm.items.filter(
@@ -358,6 +390,7 @@ export default function DoctorDashboard() {
 
   const handleSaveAssignDoctor = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (savingAssign) return;
     setSavingAssign(true);
     try {
       await api.post(`/doctor/patient/${assignForm.patientId}/assign-doctor`, {
@@ -376,6 +409,7 @@ export default function DoctorDashboard() {
 
   const handleSendBedRequest = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (savingBedRequest) return;
     setSavingBedRequest(true);
     try {
       await api.post('/beds/admissions', {
@@ -796,48 +830,79 @@ export default function DoctorDashboard() {
         {/* TAB 5: Test Orders & Lab Results */}
         {activeTab === 'tests' && (
           <div className="card">
-            <div className="card-header">
-              <span className="card-title">🧪 Laboratory & Radiology Test Orders for Assigned Patients</span>
+            <div className="card-header flex justify-between items-center" style={{ flexWrap: 'wrap', gap: 12 }}>
+              <span className="card-title">🧪 Live Laboratory & Diagnostic Test Orders ({labTests.length})</span>
+              <button className="btn btn-primary btn-sm" onClick={() => setShowConsultModal(true)}>+ Order New Lab Test</button>
             </div>
             <div className="table-container">
-              {consultations.filter(c => c.testOrders && c.testOrders.length > 0).length === 0 ? (
+              {labTests.length === 0 ? (
                 <div className="empty-state">
                   <div className="empty-icon">🧪</div>
-                  <h3>No pending test orders for your assigned patients</h3>
-                  <p>When you prescribe diagnostic laboratory or radiology tests in consultation notes, they will appear here.</p>
+                  <h3>No lab test orders found</h3>
+                  <p>When you prescribe diagnostic laboratory or radiology tests in consultation notes, they will be dispatched to the Lab Portal and listed here with live status tracking.</p>
                 </div>
               ) : (
                 <table>
                   <thead>
                     <tr>
                       <th>Patient Name & ID</th>
-                      <th>Diagnostic Tests Ordered</th>
-                      <th>Attending Doctor</th>
+                      <th>Test Name & Category</th>
+                      <th>Sample Type</th>
+                      <th>Priority</th>
+                      <th>Live Lab Status</th>
+                      <th>Results & Report Findings</th>
                       <th>Order Date</th>
-                      <th>Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {consultations
-                      .filter(c => c.testOrders && c.testOrders.length > 0)
-                      .map((c, idx) => (
-                        <tr key={c.id || idx}>
-                          <td>
-                            <strong>{c.patientName}</strong>
-                            <br /><span className="text-muted text-xs">{c.patientId}</span>
-                          </td>
-                          <td>
-                            <div className="flex gap-1 flex-wrap">
-                              {(Array.isArray(c.testOrders) ? c.testOrders : String(c.testOrders).split(',')).map((t: string, i: number) => (
-                                <span key={i} className="badge badge-info">{t.trim()}</span>
-                              ))}
+                    {labTests.map((t: any) => (
+                      <tr key={t.id}>
+                        <td>
+                          <strong>{t.patientName}</strong>
+                          <br /><span className="text-muted text-xs">{t.patientId}</span>
+                        </td>
+                        <td>
+                          <strong>{t.testName}</strong>
+                          <br /><span className="badge badge-info">{t.category || 'Pathology'}</span>
+                        </td>
+                        <td>
+                          <span className="badge badge-secondary">🩸 {t.sampleType || 'Blood'}</span>
+                        </td>
+                        <td>
+                          <span className={t.priority === 'URGENT' ? 'badge badge-danger' : 'badge badge-info'}>
+                            {t.priority === 'URGENT' ? '🔥 URGENT' : '🟢 NORMAL'}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={t.status === 'COMPLETED' ? 'badge badge-success' : t.status === 'IN_PROGRESS' ? 'badge badge-warning' : 'badge badge-gray'}>
+                            {t.status === 'COMPLETED' && '✅ COMPLETED'}
+                            {t.status === 'IN_PROGRESS' && '🔬 IN PROGRESS'}
+                            {t.status === 'PENDING' && '⏳ PENDING'}
+                            {t.status === 'CANCELLED' && '❌ CANCELLED'}
+                          </span>
+                        </td>
+                        <td style={{ maxWidth: 260 }}>
+                          {t.resultSummary ? (
+                            <div>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-main)' }}>{t.resultSummary}</div>
+                              {t.reportUrl && (
+                                <a
+                                  href={t.reportUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  style={{ fontSize: 11, color: '#0284c7', textDecoration: 'underline', marginTop: 2, display: 'inline-block' }}
+                                >
+                                  📄 View Official Report
+                                </a>
+                              )}
                             </div>
-                          </td>
-                          <td><span className="badge badge-purple">{c.doctorName}</span></td>
-                          <td>{new Date(c.createdAt || Date.now()).toLocaleDateString()}</td>
-                          <td><span className="badge badge-success">Active Order</span></td>
-                        </tr>
-                      ))}
+                          ) : (
+                            <span style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>Awaiting lab processing...</span>
+                          )}
+                        </td>
+                        <td>{new Date(t.createdAt || Date.now()).toLocaleDateString()}</td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               )}
@@ -1067,9 +1132,91 @@ export default function DoctorDashboard() {
                   <textarea className="form-control" rows={3} placeholder="Record patient history, physical examination, symptoms, treatment plan..." value={consultForm.consultationNotes} onChange={e => setConsultForm({ ...consultForm, consultationNotes: e.target.value })} />
                 </div>
 
-                <div className="form-group" style={{ marginBottom: 14 }}>
-                  <label className="form-label">Laboratory & Radiology Test Orders (comma separated)</label>
-                  <input className="form-control" placeholder="CBC, Chest X-Ray PA View, Lipid Profile" value={consultForm.testOrders} onChange={e => setConsultForm({ ...consultForm, testOrders: e.target.value })} />
+                <div className="form-group" style={{ marginBottom: 16, background: 'var(--bg-surface)', padding: 14, borderRadius: 10, border: '1px solid var(--border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                    <label className="form-label" style={{ margin: 0, fontWeight: 700, color: 'var(--text-main)' }}>
+                      🧪 Diagnostic & Lab Test Orders (Dispatched to Lab & Nurses)
+                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Priority:</span>
+                      <select
+                        className="form-control form-control-sm"
+                        style={{ width: 110, padding: '2px 8px', fontSize: 11 }}
+                        value={consultForm.labPriority || 'NORMAL'}
+                        onChange={e => setConsultForm({ ...consultForm, labPriority: e.target.value })}
+                      >
+                        <option value="NORMAL">🟢 Normal</option>
+                        <option value="URGENT">🔥 Urgent</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Preset Test Category Badges */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+                    {/* Radiology */}
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>🩻 Radiology & Imaging:</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {['Chest X-Ray PA View', 'CT Scan Abdomen', 'MRI Brain', 'USG Abdomen'].map(t => {
+                        const active = consultForm.testOrders?.split(',').map(s => s.trim()).includes(t);
+                        return (
+                          <button
+                            key={t}
+                            type="button"
+                            className={`btn btn-sm ${active ? 'btn-primary' : 'btn-secondary'}`}
+                            style={{ fontSize: 11, padding: '3px 10px', borderRadius: 20 }}
+                            onClick={() => toggleTestOrder(t)}
+                          >
+                            {active ? '✓ ' : '+ '}{t}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Pathology & Blood */}
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, marginTop: 4 }}>🩸 Blood & Pathology:</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {['Complete Blood Count (CBC)', 'Blood Group & Rh', 'Hemoglobin (Hb)', 'Lipid Profile', 'Liver Function Test (LFT)', 'Kidney Function Test (KFT)', 'Fasting Blood Sugar (FBS)'].map(t => {
+                        const active = consultForm.testOrders?.split(',').map(s => s.trim()).includes(t);
+                        return (
+                          <button
+                            key={t}
+                            type="button"
+                            className={`btn btn-sm ${active ? 'btn-primary' : 'btn-secondary'}`}
+                            style={{ fontSize: 11, padding: '3px 10px', borderRadius: 20 }}
+                            onClick={() => toggleTestOrder(t)}
+                          >
+                            {active ? '✓ ' : '+ '}{t}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Microbiology, Urine & Cardiology */}
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, marginTop: 4 }}>🔬 Urine, Swab & Cardiology:</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {['Urinalysis & Routine Culture', 'COVID-19 Swab Test', 'ECG 12-Lead', 'Echocardiogram (2D Echo)'].map(t => {
+                        const active = consultForm.testOrders?.split(',').map(s => s.trim()).includes(t);
+                        return (
+                          <button
+                            key={t}
+                            type="button"
+                            className={`btn btn-sm ${active ? 'btn-primary' : 'btn-secondary'}`}
+                            style={{ fontSize: 11, padding: '3px 10px', borderRadius: 20 }}
+                            onClick={() => toggleTestOrder(t)}
+                          >
+                            {active ? '✓ ' : '+ '}{t}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <input
+                    className="form-control"
+                    placeholder="Selected tests will appear here (e.g. Chest X-Ray, CBC, Urinalysis...)"
+                    value={consultForm.testOrders || ''}
+                    onChange={e => setConsultForm({ ...consultForm, testOrders: e.target.value })}
+                  />
                 </div>
 
                 <div className="form-grid form-grid-2">
