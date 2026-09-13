@@ -23,9 +23,15 @@ export default function RegisterPatient() {
   const router = useRouter();
   const [form, setForm] = useState({ ...emptyForm });
   const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [createdPatient, setCreatedPatient] = useState<any>(null);
   const [department, setDepartment] = useState('');
   const [eligibleDoctors, setEligibleDoctors] = useState<any[]>([]);
+
+  // Form error state management
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [checkingPhone, setCheckingPhone] = useState(false);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const url = department ? `/users/doctors?department=${encodeURIComponent(department)}` : '/users/doctors';
@@ -34,31 +40,125 @@ export default function RegisterPatient() {
       .catch(() => setEligibleDoctors([]));
   }, [department]);
 
-  const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+  const set = (k: string, v: string) => {
+    setForm((f) => ({ ...f, [k]: v }));
+    if (formErrors[k]) {
+      setFormErrors((prev) => ({ ...prev, [k]: '' }));
+    }
+  };
 
   const todayStr = new Date().toISOString().split('T')[0];
 
-  const [submitting, setSubmitting] = useState(false);
+  // Validate Indian phone number (+91 format & 10 digits starting with 6-9)
+  const validatePhoneFormat = (phoneVal: string): string | null => {
+    if (!phoneVal || !phoneVal.trim()) return 'Phone number is required';
+    const digits = phoneVal.replace(/\D/g, '');
+    const raw10 = digits.length >= 10 ? digits.slice(-10) : digits;
+    if (raw10.length !== 10) {
+      return 'Must be a valid 10-digit phone number (+91 XXXXXXXXXX)';
+    }
+    // if (!/^[6-9]\d{9}$/.test(raw10)) {
+    //   return 'Indian mobile numbers must start with 6, 7, 8, or 9';
+    // }
+    return null;
+  };
+
+  // Format phone input on change/blur to +91 format if 10 digits entered
+  const handlePhoneChange = (val: string) => {
+    set('phone', val);
+    if (phoneError) setPhoneError(null);
+    if (formErrors.phone) setFormErrors((prev) => ({ ...prev, phone: '' }));
+  };
+
+  // Check backend for duplicate phone number
+  const handlePhoneBlur = async () => {
+    const val = form.phone.trim();
+    if (!val) return;
+
+    const formatErr = validatePhoneFormat(val);
+    if (formatErr) {
+      setPhoneError(formatErr);
+      setFormErrors((prev) => ({ ...prev, phone: formatErr }));
+      return;
+    }
+
+    setCheckingPhone(true);
+    try {
+      const { data } = await api.get(`/patients/check-phone?phone=${encodeURIComponent(val)}`);
+      if (data?.exists) {
+        const dupMsg = `⚠️ Phone number already registered: ${data.patientName} (${data.patientId})`;
+        setPhoneError(dupMsg);
+        setFormErrors((prev) => ({ ...prev, phone: dupMsg }));
+      } else {
+        setPhoneError(null);
+        setFormErrors((prev) => ({ ...prev, phone: '' }));
+      }
+    } catch {
+      // Ignore background check network error
+    } finally {
+      setCheckingPhone(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (loading || submitting || createdPatient) return;
-    if (!department) {
-      toast.error('Hospital Department is required');
+
+    const errors: Record<string, string> = {};
+
+    if (!form.firstName.trim()) errors.firstName = 'First Name is required';
+    if (!form.lastName.trim()) errors.lastName = 'Last Name is required';
+    if (!form.dateOfBirth) errors.dateOfBirth = 'Date of Birth is required';
+    if (!form.gender) errors.gender = 'Gender is required';
+    if (!department) errors.department = 'Hospital Department is required';
+    if (!form.assignedDoctorId) errors.assignedDoctorId = 'Assigned Doctor is required';
+
+    const pErr = validatePhoneFormat(form.phone);
+    if (pErr) {
+      errors.phone = pErr;
+    } else if (phoneError && phoneError.includes('already registered')) {
+      errors.phone = phoneError;
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      if (errors.phone) setPhoneError(errors.phone);
+      toast.error(errors.phone || 'Please fix the highlighted form errors before submitting');
       return;
     }
-    if (!form.assignedDoctorId) {
-      toast.error('Assigned Doctor is required');
-      return;
-    }
+
     setSubmitting(true);
     setLoading(true);
+
     try {
-      const { data } = await api.post('/patients', form);
+      // Final duplicate phone check with backend before posting
+      const checkRes = await api.get(`/patients/check-phone?phone=${encodeURIComponent(form.phone)}`);
+      if (checkRes.data?.exists) {
+        const dupMsg = `⚠️ Phone number already registered: ${checkRes.data.patientName} (${checkRes.data.patientId})`;
+        setPhoneError(dupMsg);
+        setFormErrors((prev) => ({ ...prev, phone: dupMsg }));
+        toast.error(dupMsg);
+        setLoading(false);
+        setSubmitting(false);
+        return;
+      }
+
+      const { data } = await api.post('/patients', {
+        ...form,
+        department,
+      });
+
       toast.success(`✅ Patient Registered! OPD Token: ${data.opdTokenNumber}`);
       setCreatedPatient(data);
+      setFormErrors({});
+      setPhoneError(null);
     } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Registration failed');
+      const msg = err.response?.data?.message || 'Registration failed';
+      if (err.response?.status === 409 || msg.toLowerCase().includes('phone')) {
+        setPhoneError(msg);
+        setFormErrors((prev) => ({ ...prev, phone: msg }));
+      }
+      toast.error(msg);
     } finally {
       setLoading(false);
       setSubmitting(false);
@@ -125,7 +225,7 @@ export default function RegisterPatient() {
       </div>
       <div className="page-content">
         {!createdPatient ? (
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit} noValidate>
             {/* Personal Info */}
             <div className="card" style={{ marginBottom: 20 }}>
               <div className="card-header"><span className="card-title">👤 Personal Information</span></div>
@@ -133,23 +233,75 @@ export default function RegisterPatient() {
                 <div className="form-grid form-grid-3">
                   <div className="form-group">
                     <label className="form-label">First Name *</label>
-                    <input className="form-control" placeholder="John" value={form.firstName} onChange={e => set('firstName', e.target.value)} required />
+                    <input
+                      className="form-control"
+                      style={{ borderColor: formErrors.firstName ? '#ef4444' : undefined }}
+                      placeholder="John"
+                      value={form.firstName}
+                      onChange={e => set('firstName', e.target.value)}
+                      required
+                    />
+                    {formErrors.firstName && (
+                      <div style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', fontWeight: 500 }}>
+                        {formErrors.firstName}
+                      </div>
+                    )}
                   </div>
+
                   <div className="form-group">
                     <label className="form-label">Last Name *</label>
-                    <input className="form-control" placeholder="Doe" value={form.lastName} onChange={e => set('lastName', e.target.value)} required />
+                    <input
+                      className="form-control"
+                      style={{ borderColor: formErrors.lastName ? '#ef4444' : undefined }}
+                      placeholder="Doe"
+                      value={form.lastName}
+                      onChange={e => set('lastName', e.target.value)}
+                      required
+                    />
+                    {formErrors.lastName && (
+                      <div style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', fontWeight: 500 }}>
+                        {formErrors.lastName}
+                      </div>
+                    )}
                   </div>
+
                   <div className="form-group">
                     <label className="form-label">Date of Birth *</label>
-                    <input type="date" className="form-control" value={form.dateOfBirth} max={todayStr} onChange={e => set('dateOfBirth', e.target.value)} required />
+                    <input
+                      type="date"
+                      className="form-control"
+                      style={{ borderColor: formErrors.dateOfBirth ? '#ef4444' : undefined }}
+                      value={form.dateOfBirth}
+                      max={todayStr}
+                      onChange={e => set('dateOfBirth', e.target.value)}
+                      required
+                    />
+                    {formErrors.dateOfBirth && (
+                      <div style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', fontWeight: 500 }}>
+                        {formErrors.dateOfBirth}
+                      </div>
+                    )}
                   </div>
+
                   <div className="form-group">
                     <label className="form-label">Gender *</label>
-                    <select className="form-control" value={form.gender} onChange={e => set('gender', e.target.value)} required>
+                    <select
+                      className="form-control"
+                      style={{ borderColor: formErrors.gender ? '#ef4444' : undefined }}
+                      value={form.gender}
+                      onChange={e => set('gender', e.target.value)}
+                      required
+                    >
                       <option value="">Select Gender</option>
                       {GENDERS.map(g => <option key={g} value={g}>{g}</option>)}
                     </select>
+                    {formErrors.gender && (
+                      <div style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', fontWeight: 500 }}>
+                        {formErrors.gender}
+                      </div>
+                    )}
                   </div>
+
                   <div className="form-group">
                     <label className="form-label">Blood Group</label>
                     <select className="form-control" value={form.bloodGroup} onChange={e => set('bloodGroup', e.target.value)}>
@@ -157,14 +309,40 @@ export default function RegisterPatient() {
                       {BLOOD_GROUPS.map(b => <option key={b} value={b}>{b}</option>)}
                     </select>
                   </div>
+
                   <div className="form-group">
-                    <label className="form-label">Phone *</label>
-                    <input className="form-control" placeholder="+91 1234567890" value={form.phone} onChange={e => set('phone', e.target.value)} required />
+                    <label className="form-label">
+                      Phone * {checkingPhone && <span style={{ fontSize: '11px', color: '#0ea5e9', fontWeight: 'bold' }}>(Checking backend...)</span>}
+                    </label>
+                    <input
+                      className="form-control"
+                      style={{
+                        borderColor: (phoneError || formErrors.phone) ? '#ef4444' : undefined,
+                        backgroundColor: (phoneError || formErrors.phone) ? '#fef2f2' : undefined,
+                      }}
+                      placeholder="+91 9876543210"
+                      value={form.phone}
+                      onChange={e => handlePhoneChange(e.target.value)}
+                      onBlur={handlePhoneBlur}
+                      required
+                    />
+                    {(phoneError || formErrors.phone) && (
+                      <div style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', fontWeight: 600 }}>
+                        {phoneError || formErrors.phone}
+                      </div>
+                    )}
+                    {!phoneError && !formErrors.phone && (
+                      <div style={{ color: '#64748b', fontSize: '11px', marginTop: '4px' }}>
+                        Accepts +91 format (e.g. +91 9876543210)
+                      </div>
+                    )}
                   </div>
+
                   <div className="form-group">
                     <label className="form-label">Email</label>
                     <input type="email" className="form-control" placeholder="patient@email.com" value={form.email} onChange={e => set('email', e.target.value)} />
                   </div>
+
                   <div className="form-group" style={{ gridColumn: 'span 2' }}>
                     <label className="form-label">Address</label>
                     <input className="form-control" placeholder="Street address" value={form.address} onChange={e => set('address', e.target.value)} />
@@ -184,7 +362,7 @@ export default function RegisterPatient() {
                   </div>
                   <div className="form-group">
                     <label className="form-label">Contact Phone</label>
-                    <input className="form-control" placeholder="+91 1234567890" value={form.emergencyPhone} onChange={e => set('emergencyPhone', e.target.value)} />
+                    <input className="form-control" placeholder="+91 9876543210" value={form.emergencyPhone} onChange={e => set('emergencyPhone', e.target.value)} />
                   </div>
                 </div>
               </div>
@@ -212,18 +390,11 @@ export default function RegisterPatient() {
               <div className="card-header"><span className="card-title">🛏️ Hospital Department & Attending Doctor Assignment</span></div>
               <div className="card-body">
                 <div className="form-grid form-grid-3">
-                  {/* <div className="form-group">
-                    <label className="form-label">Status</label>
-                    <select className="form-control" value={form.status} onChange={e => set('status', e.target.value)}>
-                      <option value="registered">Registered</option>
-                      <option value="admitted">Admitted</option>
-                      <option value="under_treatment">Under Treatment</option>
-                    </select>
-                  </div> */}
                   <div className="form-group">
                     <label className="form-label">Hospital Department *</label>
                     <select
                       className="form-control"
+                      style={{ borderColor: formErrors.department ? '#ef4444' : undefined }}
                       value={department}
                       onChange={e => {
                         setDepartment(e.target.value);
@@ -234,11 +405,18 @@ export default function RegisterPatient() {
                       <option value="">Select Department</option>
                       {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
                     </select>
+                    {formErrors.department && (
+                      <div style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', fontWeight: 500 }}>
+                        {formErrors.department}
+                      </div>
+                    )}
                   </div>
+
                   <div className="form-group">
                     <label className="form-label">Assigned Doctor * ({eligibleDoctors.length} available)</label>
                     <select
                       className="form-control"
+                      style={{ borderColor: formErrors.assignedDoctorId ? '#ef4444' : undefined }}
                       value={form.assignedDoctorId}
                       onChange={e => {
                         const docId = e.target.value;
@@ -249,6 +427,7 @@ export default function RegisterPatient() {
                           assignedDoctorName: doc ? `Dr. ${doc.firstName} ${doc.lastName}` : '',
                           admittedBy: doc ? `Dr. ${doc.firstName} ${doc.lastName}` : f.admittedBy,
                         }));
+                        if (formErrors.assignedDoctorId) setFormErrors(prev => ({ ...prev, assignedDoctorId: '' }));
                       }}
                       required
                     >
@@ -259,19 +438,13 @@ export default function RegisterPatient() {
                         </option>
                       ))}
                     </select>
+                    {formErrors.assignedDoctorId && (
+                      <div style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', fontWeight: 500 }}>
+                        {formErrors.assignedDoctorId}
+                      </div>
+                    )}
                   </div>
-                  {/* <div className="form-group">
-                    <label className="form-label">Ward</label>
-                    <input className="form-control" placeholder="General Ward" value={form.ward} onChange={e => set('ward', e.target.value)} />
-                  </div> */}
-                  {/* <div className="form-group">
-                    <label className="form-label">Bed Number</label>
-                    <input className="form-control" placeholder="B-101" value={form.bedNumber} onChange={e => set('bedNumber', e.target.value)} />
-                  </div> */}
-                  {/* <div className="form-group">
-                    <label className="form-label">Assigned Nurse</label>
-                    <input className="form-control" placeholder="Nurse Johnson" value={form.assignedNurse} onChange={e => set('assignedNurse', e.target.value)} />
-                  </div> */}
+
                   <div className="form-group" style={{ gridColumn: 'span 3' }}>
                     <label className="form-label">Diagnosis</label>
                     <input className="form-control" placeholder="Initial diagnosis" value={form.diagnosis} onChange={e => set('diagnosis', e.target.value)} />
@@ -289,11 +462,11 @@ export default function RegisterPatient() {
               <button
                 type="submit"
                 className="btn btn-primary"
-                disabled={loading || submitting}
+                disabled={loading || submitting || checkingPhone || !!phoneError}
                 style={{
                   minWidth: 220,
-                  opacity: loading || submitting ? 0.6 : 1,
-                  cursor: loading || submitting ? 'not-allowed' : 'pointer',
+                  opacity: loading || submitting || checkingPhone || !!phoneError ? 0.6 : 1,
+                  cursor: loading || submitting || checkingPhone || !!phoneError ? 'not-allowed' : 'pointer',
                 }}
               >
                 {loading || submitting ? '⏳ Registering & Saving...' : '🎟️ Register & Generate OPD Token'}
@@ -323,7 +496,7 @@ export default function RegisterPatient() {
 
             <div className="flex gap-3 justify-center">
               <button className="btn btn-primary" onClick={handlePrintToken}>🖨️ Print OPD Token Slip</button>
-              <button className="btn btn-secondary" onClick={() => { setCreatedPatient(null); setForm({ ...emptyForm }); }}>+ Register Another</button>
+              <button className="btn btn-secondary" onClick={() => { setCreatedPatient(null); setForm({ ...emptyForm }); setPhoneError(null); setFormErrors({}); }}>+ Register Another</button>
               <button className="btn btn-secondary" onClick={() => router.push('/dashboard/receptionist')}>Go to Dashboard</button>
             </div>
           </div>

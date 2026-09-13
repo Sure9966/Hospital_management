@@ -23,6 +23,11 @@ export class PatientsController {
     return this.patientsService.search(q, user);
   }
 
+  @Get('check-phone')
+  checkPhone(@Query('phone') phone: string) {
+    return this.patientsService.checkPhoneExists(phone);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string, @CurrentUser() user: any) {
     return this.patientsService.findOne(id, user);

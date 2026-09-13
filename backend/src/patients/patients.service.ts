@@ -1,4 +1,4 @@
-import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Injectable, ForbiddenException, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Patient } from './patient.entity';
@@ -11,6 +11,25 @@ function isUuid(val?: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
 }
 
+export function normalizePhone(phone?: string): string {
+  if (!phone) return '';
+  const digits = phone.replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.length === 10) {
+    return `+91 ${digits}`;
+  }
+  if (digits.length === 12 && digits.startsWith('91')) {
+    return `+91 ${digits.slice(2)}`;
+  }
+  if (digits.length === 11 && digits.startsWith('0')) {
+    return `+91 ${digits.slice(1)}`;
+  }
+  if (phone.trim().startsWith('+')) {
+    return `+${digits}`;
+  }
+  return `+91 ${digits.slice(-10)}`;
+}
+
 @Injectable()
 export class PatientsService {
   constructor(
@@ -21,19 +40,46 @@ export class PatientsService {
     private notificationsService: NotificationsService,
   ) {}
 
+  async checkPhoneExists(phone: string) {
+    if (!phone || !phone.trim()) return { exists: false };
+    const cleanDigits = phone.replace(/\D/g, '');
+    const last10 = cleanDigits.slice(-10);
+    if (last10.length < 10) {
+      return { exists: false, invalidFormat: true };
+    }
+
+    const existing = await this.patientRepo
+      .createQueryBuilder('p')
+      .where("REPLACE(REPLACE(p.phone, ' ', ''), '+', '') LIKE :digits", {
+        digits: `%${last10}`,
+      })
+      .getOne();
+
+    if (existing) {
+      return {
+        exists: true,
+        patientId: existing.patientId,
+        patientName: `${existing.firstName} ${existing.lastName}`,
+        phone: existing.phone,
+      };
+    }
+
+    return { exists: false };
+  }
+
   async create(data: Partial<Patient>, createdById?: string) {
-    // Prevent duplicate patient creation if patient with same phone, first name, and last name exists
-    if (data.phone && data.firstName && data.lastName) {
-      const existing = await this.patientRepo.findOne({
-        where: {
-          phone: data.phone,
-          firstName: data.firstName,
-          lastName: data.lastName,
-        },
-      });
-      if (existing) {
-        return existing;
+    if (data.phone) {
+      const formatted = normalizePhone(data.phone);
+      const check = await this.checkPhoneExists(data.phone);
+      if (check.exists) {
+        throw new ConflictException(
+          `Patient with phone number ${formatted || data.phone} already exists in backend (${check.patientName}, Patient ID: ${check.patientId})`,
+        );
       }
+      data.phone = formatted;
+    }
+    if (data.emergencyPhone) {
+      data.emergencyPhone = normalizePhone(data.emergencyPhone);
     }
 
     const count = await this.patientRepo.count();
