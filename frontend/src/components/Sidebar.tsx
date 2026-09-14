@@ -55,9 +55,9 @@ const roleMenus: Record<string, { icon: string; label: string; href: string }[]>
     { icon: '💊', label: 'Prescriptions', href: '/dashboard/patient/prescriptions' },
   ],
   lab_technician: [
-    { icon: '📊', label: 'Lab Dashboard', href: '/dashboard/lab_technician' },
-    { icon: '🧪', label: 'Pending Requests', href: '/dashboard/lab_technician?tab=pending' },
-    { icon: '📋', label: 'Completed Results', href: '/dashboard/lab_technician?tab=completed' },
+    { icon: '📊', label: 'Lab Dashboard', href: '/dashboard/lab' },
+    { icon: '🧪', label: 'Pending Requests', href: '/dashboard/lab?tab=pending' },
+    { icon: '📋', label: 'Completed Results', href: '/dashboard/lab?tab=completed' },
   ],
 };
 
@@ -106,8 +106,16 @@ export default function Sidebar({ role }: { role: string }) {
             <Link
               key={item.href}
               href={item.href}
-              // className={`nav-item ${pathname === item.href ? 'active' : ''}`}
-              className={`nav-item ${item.href.includes('?tab=') ? pathname === item.href.split('?')[0] && currentTab === item.href.split('tab=')[1] ? 'active' : '' : pathname === item.href && !currentTab ? 'active' : ''}`}
+              className={`nav-item ${
+                item.href.includes('?tab=')
+                  ? (pathname === item.href.split('?')[0] || (pathname === '/dashboard/lab_technician' && item.href.startsWith('/dashboard/lab'))) &&
+                    currentTab === item.href.split('tab=')[1]
+                    ? 'active'
+                    : ''
+                  : (pathname === item.href || (pathname === '/dashboard/lab_technician' && item.href === '/dashboard/lab')) && !currentTab
+                  ? 'active'
+                  : ''
+              }`}
             >
               <span className="nav-icon">{item.icon}</span>
               {item.label}

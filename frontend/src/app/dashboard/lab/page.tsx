@@ -4,12 +4,23 @@ import { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
+import { useSearchParams } from 'next/navigation';
 
 export default function LabDashboard() {
   const [labTests, setLabTests] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'in_progress' | 'completed' | 'urgent'>('all');
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'in_progress' | 'completed' | 'urgent'>(
+    (tabParam && ['pending', 'in_progress', 'completed', 'urgent', 'all'].includes(tabParam) ? tabParam : 'all') as any
+  );
   const [searchTerm, setSearchTerm] = useState('');
+
+  useEffect(() => {
+    if (tabParam && ['pending', 'in_progress', 'completed', 'urgent', 'all'].includes(tabParam)) {
+      setActiveTab(tabParam as any);
+    }
+  }, [tabParam]);
 
   // New Test Request Modal
   const [showOrderModal, setShowOrderModal] = useState(false);

@@ -19,13 +19,24 @@ import { LabModule } from './lab/lab.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    ThrottlerModule.forRoot([
-      {
-        name: 'default',
-        ttl: 60000,
-        limit: 100,
-      },
-    ]),
+    // ThrottlerModule.forRoot([
+    //   {
+    //     name: 'default',
+    //     ttl: 60000,
+    //     limit: 100,
+    //   },
+    // ]),
+    ThrottlerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => [
+        {
+          name: 'default',
+          ttl: parseInt(config.get<string>('THROTTLE_TTL_MS', '60000'), 10),
+          limit: parseInt(config.get<string>('THROTTLE_LIMIT', '100'), 10),
+        },
+      ],
+    }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -40,9 +51,9 @@ import { LabModule } from './lab/lab.module';
 
         const sslConfig = useSsl
           ? {
-              rejectUnauthorized:
-                configService.get<string>('DB_SSL_REJECT_UNAUTHORIZED') === 'true',
-            }
+            rejectUnauthorized:
+              configService.get<string>('DB_SSL_REJECT_UNAUTHORIZED') === 'true',
+          }
           : false;
 
         if (databaseUrl) {

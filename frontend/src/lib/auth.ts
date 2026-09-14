@@ -64,7 +64,7 @@ export function getUser(): User | null {
   // Check cookie first
   const cookieUser = getCookie(USER_KEY);
   if (cookieUser) {
-    try { return JSON.parse(cookieUser); } catch {}
+    try { return JSON.parse(cookieUser); } catch { }
   }
 
   // Fallback to localStorage
@@ -74,7 +74,7 @@ export function getUser(): User | null {
       const parsed = JSON.parse(localUser);
       setCookie(USER_KEY, JSON.stringify(parsed));
       return parsed;
-    } catch {}
+    } catch { }
   }
   return null;
 }
