@@ -49,7 +49,8 @@ export default function LoginPage() {
       const { data } = await api.post('/auth/login', form);
       setAuth(data.accessToken, data.user);
       toast.success(`Welcome, ${data.user.firstName || 'User'}! Redirecting to ${data.user.role.toUpperCase()} portal...`);
-      router.push(`/dashboard/${data.user.role}`);
+      const targetRole = (data.user.role === 'lab_technician' || data.user.role === 'lab') ? 'lab' : data.user.role;
+      router.push(`/dashboard/${targetRole}`);
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Invalid email or password');
       setLoading(false);

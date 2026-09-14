@@ -40,7 +40,7 @@ export class Patient {
   @Column()
   lastName: string;
 
-  @Column()
+  @Column({ nullable: true })
   dateOfBirth: string;
 
   @Column()
@@ -49,7 +49,7 @@ export class Patient {
   @Column({ nullable: true })
   bloodGroup: string;
 
-  @Column()
+  @Column({ nullable: true })
   phone: string;
 
   @Column({ nullable: true })
@@ -93,6 +93,15 @@ export class Patient {
 
   @Column({ nullable: true })
   assignedNurse: string;
+
+  @Column({ default: false })
+  isEmergency: boolean;
+
+  @Column({ default: true })
+  isBasicRegistrationComplete: boolean;
+
+  @Column({ nullable: true })
+  emergencySeverity: string; // e.g., 'critical', 'urgent', 'standard'
 
   @Column({
     type: 'enum',

@@ -8,6 +8,7 @@ export default function ReceptionistDashboard() {
   const [stats, setStats] = useState<any>(null);
   const [todayAppts, setTodayAppts] = useState<any[]>([]);
   const [recentPatients, setRecentPatients] = useState<any[]>([]);
+  const [pendingEmergency, setPendingEmergency] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -15,13 +16,16 @@ export default function ReceptionistDashboard() {
       api.get('/management/dashboard'),
       api.get('/receptionist/appointments/today'),
       api.get('/patients'),
-    ]).then(([statsRes, apptRes, patientRes]) => {
+      api.get('/patients/emergency/pending'),
+    ]).then(([statsRes, apptRes, patientRes, emergencyRes]) => {
       setStats(statsRes.data);
       setTodayAppts(apptRes.data || []);
       setRecentPatients(patientRes.data || []);
+      setPendingEmergency(emergencyRes.data || []);
     }).catch(() => {
       setTodayAppts([]);
       setRecentPatients([]);
+      setPendingEmergency([]);
     }).finally(() => setLoading(false));
   }, []);
 
@@ -40,8 +44,11 @@ export default function ReceptionistDashboard() {
           Receptionist Dashboard <span style={{ marginLeft: 8 }}>/ Overview</span>
         </div>
         <div className="flex gap-2">
+          <Link href="/dashboard/receptionist/register?mode=emergency" className="btn btn-primary btn-sm" style={{ background: '#ef4444', borderColor: '#dc2626' }}>
+            🚨 Emergency Quick Intake
+          </Link>
           <Link href="/dashboard/receptionist/register" className="btn btn-primary btn-sm">
-            + Register Patient
+            + Standard Registration
           </Link>
           <Link href="/dashboard/receptionist/opd-queue" className="btn btn-secondary btn-sm">
             🎟️ OPD Queue Tokens
@@ -57,10 +64,10 @@ export default function ReceptionistDashboard() {
           <>
             <div className="stats-grid">
               {[
+                { icon: '🚨', label: 'Pending Emergency Reg.', value: pendingEmergency.length, color: '#ef4444', gradient: 'linear-gradient(135deg,#ef4444,#f87171)' },
                 { icon: '🏥', label: 'Total Patients', value: stats?.totalPatients ?? 0, color: '#6366f1', gradient: 'linear-gradient(135deg,#6366f1,#818cf8)' },
                 { icon: '📅', label: 'Today\'s Appointments', value: stats?.todayAppointments ?? 0, color: '#0ea5e9', gradient: 'linear-gradient(135deg,#0ea5e9,#38bdf8)' },
-                { icon: '🛏️', label: 'Admitted', value: stats?.admittedPatients ?? 0, color: '#10b981', gradient: 'linear-gradient(135deg,#10b981,#34d399)' },
-                { icon: '📋', label: 'Total Appointments', value: stats?.totalAppointments ?? 0, color: '#f59e0b', gradient: 'linear-gradient(135deg,#f59e0b,#fbbf24)' },
+                { icon: '🛏️', label: 'Admitted Patients', value: stats?.admittedPatients ?? 0, color: '#10b981', gradient: 'linear-gradient(135deg,#10b981,#34d399)' },
               ].map((s) => (
                 <div key={s.label} className="stat-card" style={{ '--gradient': s.gradient } as any}>
                   <div className="stat-icon" style={{ background: `${s.color}22`, color: s.color }}>{s.icon}</div>
@@ -71,6 +78,65 @@ export default function ReceptionistDashboard() {
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 24 }}>
+              {/* Emergency Patients Pending Registration */}
+              {pendingEmergency.length > 0 && (
+                <div className="card" style={{ borderLeft: '4px solid #ef4444' }}>
+                  <div className="card-header" style={{ background: 'rgba(239, 68, 68, 0.05)' }}>
+                    <span className="card-title" style={{ color: '#ef4444' }}>
+                      🚨 Pending Emergency Registrations ({pendingEmergency.length})
+                    </span>
+                    <Link href="/dashboard/receptionist/register?mode=complete" className="btn btn-secondary btn-sm">
+                      View All Pending
+                    </Link>
+                  </div>
+                  <div className="table-container">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Token</th>
+                          <th>Patient ID</th>
+                          <th>Patient Name</th>
+                          <th>Severity</th>
+                          <th>Condition</th>
+                          <th>Assigned Doctor</th>
+                          <th>Admitted</th>
+                          <th>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pendingEmergency.map((p) => (
+                          <tr key={p.id}>
+                            <td>
+                              <span style={{ fontWeight: 800, color: '#ef4444', background: 'rgba(239, 68, 68, 0.1)', padding: '2px 8px', borderRadius: 6 }}>
+                                {p.opdTokenNumber || 'EMG-TK'}
+                              </span>
+                            </td>
+                            <td><strong>{p.patientId}</strong></td>
+                            <td>{p.firstName} {p.lastName}</td>
+                            <td>
+                              <span className={`badge ${p.emergencySeverity === 'critical' ? 'badge-danger' : 'badge-warning'}`}>
+                                {p.emergencySeverity || 'critical'}
+                              </span>
+                            </td>
+                            <td>{p.diagnosis || 'Emergency Care'}</td>
+                            <td>Dr. {p.assignedDoctorName || 'Emergency Doctor'}</td>
+                            <td>{new Date(p.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
+                            <td>
+                              <Link
+                                href={`/dashboard/receptionist/register?mode=complete&id=${p.id}`}
+                                className="btn btn-primary btn-sm"
+                              >
+                                📝 Complete Reg.
+                              </Link>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
               {/* Today's Appointments & OPD Queue Tokens */}
               <div className="card">
                 <div className="card-header">
@@ -114,7 +180,12 @@ export default function ReceptionistDashboard() {
               <div className="card">
                 <div className="card-header">
                   <span className="card-title">🏥 Recently Registered Patients ({recentPatients.length})</span>
-                  <Link href="/dashboard/receptionist/register" className="btn btn-primary btn-sm">+ New Patient</Link>
+                  <div className="flex gap-2">
+                    <Link href="/dashboard/receptionist/register?mode=emergency" className="btn btn-secondary btn-sm" style={{ color: '#ef4444' }}>
+                      🚨 Emergency Intake
+                    </Link>
+                    <Link href="/dashboard/receptionist/register" className="btn btn-primary btn-sm">+ New Patient</Link>
+                  </div>
                 </div>
                 <div className="table-container">
                   {recentPatients.length === 0 ? (
@@ -130,7 +201,7 @@ export default function ReceptionistDashboard() {
                           <th>Patient ID</th>
                           <th>Full Name</th>
                           <th>Phone</th>
-                          <th>Gender</th>
+                          <th>Type</th>
                           <th>Department</th>
                           <th>Assigned Doctor</th>
                           <th>Registered Date</th>
@@ -140,14 +211,22 @@ export default function ReceptionistDashboard() {
                         {recentPatients.slice(0, 10).map((p) => (
                           <tr key={p.id}>
                             <td>
-                              <span style={{ fontWeight: 800, color: '#0ea5e9', background: 'rgba(14,165,233,0.1)', padding: '2px 8px', borderRadius: 6 }}>
+                              <span style={{ fontWeight: 800, color: p.isEmergency ? '#ef4444' : '#0ea5e9', background: p.isEmergency ? 'rgba(239,68,68,0.1)' : 'rgba(14,165,233,0.1)', padding: '2px 8px', borderRadius: 6 }}>
                                 {p.opdTokenNumber || 'N/A'}
                               </span>
                             </td>
                             <td><strong>{p.patientId}</strong></td>
                             <td>{p.firstName} {p.lastName}</td>
-                            <td>{p.phone}</td>
-                            <td style={{ textTransform: 'capitalize' }}>{p.gender}</td>
+                            <td>{p.phone || 'N/A'}</td>
+                            <td>
+                              {p.isEmergency ? (
+                                <span className={`badge ${p.isBasicRegistrationComplete ? 'badge-warning' : 'badge-danger'}`}>
+                                  🚨 {p.isBasicRegistrationComplete ? 'Emergency (Complete)' : 'Emergency (Pending)'}
+                                </span>
+                              ) : (
+                                <span className="badge badge-success">Standard</span>
+                              )}
+                            </td>
                             <td><span className="badge badge-secondary">{p.department || 'General'}</span></td>
                             <td>{p.assignedDoctorName || 'General Doctor'}</td>
                             <td>{new Date(p.createdAt).toLocaleDateString()}</td>

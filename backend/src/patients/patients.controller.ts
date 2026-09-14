@@ -13,6 +13,16 @@ export class PatientsController {
     return this.patientsService.create(body, user?.id);
   }
 
+  @Post('emergency')
+  createEmergency(@Body() body: any, @CurrentUser() user: any) {
+    return this.patientsService.createEmergency(body, user?.id);
+  }
+
+  @Get('emergency/pending')
+  getPendingEmergency() {
+    return this.patientsService.findPendingEmergency();
+  }
+
   @Get()
   findAll(@CurrentUser() user: any, @Query('doctorId') doctorId?: string) {
     return this.patientsService.findAll(user, doctorId);
@@ -36,6 +46,11 @@ export class PatientsController {
   @Put(':id')
   update(@Param('id') id: string, @Body() body: any, @CurrentUser() user: any) {
     return this.patientsService.update(id, body, user);
+  }
+
+  @Put(':id/complete-registration')
+  completeRegistration(@Param('id') id: string, @Body() body: any) {
+    return this.patientsService.completeRegistration(id, body);
   }
 
   @Delete(':id')

@@ -20,7 +20,7 @@ export default function ManagementDashboard() {
     api.get('/management/dashboard').then(r => setStats(r.data));
     api.get('/users').then(r => setStaff(r.data));
     api.get('/patients').then(r => setPatients(r.data));
-    api.get('/management/discharges').then(r => setDischargeSummaries(r.data)).catch(() => {});
+    api.get('/management/discharges').then(r => setDischargeSummaries(r.data)).catch(() => { });
   }, []);
   useEffect(() => {
     const tabParam = searchParams.get('tab');
@@ -62,7 +62,7 @@ export default function ManagementDashboard() {
 
   const roleColors: Record<string, string> = {
     admin: '#6366f1', receptionist: '#0ea5e9', nurse: '#10b981', doctor: '#f472b6',
-    pharmacist: '#f59e0b', management: '#ef4444', patient: '#8b5cf6',
+    pharmacist: '#f59e0b', management: '#ef4444', patient: '#8b5cf6', lab_technician: '#14b8a6',
   };
 
   const statusColors: Record<string, string> = {
@@ -169,12 +169,21 @@ export default function ManagementDashboard() {
             <div className="card-header"><span className="card-title">🏥 All Patients ({patients.length})</span></div>
             <div className="table-container">
               <table>
-                <thead><tr><th>Patient ID</th><th>Name</th><th>Gender</th><th>Blood Group</th><th>Ward</th><th>Status</th></tr></thead>
+                <thead><tr><th>Patient ID</th><th>Name</th><th>Type / Emergency Status</th><th>Gender</th><th>Blood Group</th><th>Ward</th><th>Status</th></tr></thead>
                 <tbody>
                   {patients.map(p => (
                     <tr key={p.id}>
                       <td><code style={{ color: 'var(--primary-light)', fontSize: 12 }}>{p.patientId}</code></td>
                       <td><strong>{p.firstName} {p.lastName}</strong></td>
+                      <td>
+                        {p.isEmergency ? (
+                          <span className={`badge ${p.isBasicRegistrationComplete ? 'badge-warning' : 'badge-danger'}`}>
+                            🚨 Emergency ({p.isBasicRegistrationComplete ? 'Complete' : 'Basic Pending'})
+                          </span>
+                        ) : (
+                          <span className="badge badge-success">Standard</span>
+                        )}
+                      </td>
                       <td>{p.gender}</td>
                       <td>{p.bloodGroup || '—'}</td>
                       <td>{p.ward || '—'}</td>

@@ -673,6 +673,11 @@ export default function DoctorDashboard() {
                       <tr key={p.id}>
                         <td>
                           <strong>{p.firstName} {p.lastName}</strong>
+                          {p.isEmergency && (
+                            <span className="badge badge-danger" style={{ marginLeft: 6, fontSize: 10 }}>
+                              🚨 Emergency {p.isBasicRegistrationComplete ? '' : '(Pending Details)'}
+                            </span>
+                          )}
                           <br /><span style={{ color: '#0ea5e9', fontSize: 11, fontWeight: 700 }}>{p.patientId}</span>
                         </td>
                         <td>{p.gender} ({p.dateOfBirth})</td>

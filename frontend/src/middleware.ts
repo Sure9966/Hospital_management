@@ -22,14 +22,7 @@ export function middleware(req: NextRequest) {
 
   const isAuthenticated = !!tokenCookie && !!user;
 
-  // Protect /login route: Logged in users trying to visit /login in address bar get redirected to their dashboard
-  if (pathname === '/login' || pathname === '/') {
-    if (isAuthenticated && user?.role) {
-      const userRole = user.role === 'lab' ? 'lab_technician' : user.role;
-      const targetDashboard = userRole === 'lab_technician' ? '/dashboard/lab' : `/dashboard/${userRole}`;
-      return NextResponse.redirect(new URL(targetDashboard, req.url));
-    }
-  }
+  // Note: /login and / are not auto-redirected on the server so that tab-isolated sessionStorage can be evaluated on the client.
 
   // Protect /dashboard routes: Direct search bar access to /dashboard without auth redirects to /login
   if (pathname.startsWith('/dashboard')) {

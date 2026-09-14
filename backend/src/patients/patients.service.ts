@@ -1,7 +1,7 @@
 import { Injectable, ForbiddenException, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Patient } from './patient.entity';
+import { Patient, PatientStatus } from './patient.entity';
 import { Appointment, AppointmentStatus } from '../receptionist/appointment.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { HospitalConfig } from '../config/hospital.config';
@@ -253,6 +253,169 @@ export class PatientsService {
       await this.patientRepo.delete(patient.id);
     }
     return { success: true };
+  }
+
+  async createEmergency(data: Partial<Patient>, createdById?: string) {
+    if (data.phone && data.phone.trim()) {
+      data.phone = normalizePhone(data.phone);
+    }
+    if (data.emergencyPhone && data.emergencyPhone.trim()) {
+      data.emergencyPhone = normalizePhone(data.emergencyPhone);
+    }
+
+    const count = await this.patientRepo.count();
+    const year = new Date().getFullYear().toString().slice(-2);
+    const seq = String(count + 1).padStart(6, '0');
+    const patientId = data.patientId || `EMG${year}${seq}`;
+    const opdTokenNumber = `EMG-TK-${year}-${seq}`;
+    const admissionNumber = `EMG-IP${year}${seq}`;
+
+    const firstName = data.firstName?.trim() || 'Emergency';
+    const lastName = data.lastName?.trim() || `Patient-${seq.slice(-4)}`;
+
+    const patient = this.patientRepo.create({
+      ...data,
+      firstName,
+      lastName,
+      patientId,
+      opdTokenNumber,
+      admissionNumber,
+      isEmergency: true,
+      isBasicRegistrationComplete: false,
+      emergencySeverity: data.emergencySeverity || 'critical',
+      department: data.department || 'Emergency',
+      status: PatientStatus.UNDER_TREATMENT,
+    });
+    const saved = await this.patientRepo.save(patient);
+
+    // Auto-create OPD Queue Appointment for emergency consultation
+    try {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const now = new Date();
+      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+      let docName = saved.assignedDoctorName || '';
+      if (docName.toLowerCase().startsWith('dr.')) {
+        docName = docName.replace(/^dr\.\s*/i, '');
+      }
+      if (!docName) {
+        docName = 'Emergency Doctor';
+      }
+
+      const appointment = this.appointmentRepo.create({
+        patientId: saved.patientId,
+        patientName: `${saved.firstName} ${saved.lastName}`,
+        doctorId: saved.assignedDoctorId || undefined,
+        doctorName: docName,
+        department: saved.department || 'Emergency',
+        appointmentDate: todayStr,
+        appointmentTime: timeStr,
+        status: AppointmentStatus.SCHEDULED,
+        reason: `🚨 EMERGENCY INTAKE: ${saved.diagnosis || 'Emergency Medical Care'}`,
+        notes: `EMERGENCY Token: ${saved.opdTokenNumber}`,
+        registeredBy: createdById,
+      });
+      await this.appointmentRepo.save(appointment);
+    } catch (err) {
+      // Non-blocking
+    }
+
+    const idempotencyKey = `emergency-patient-${saved.id}-${Date.now()}`;
+
+    // 1. Notify Management so they can track emergency patients clearly
+    await this.notificationsService.sendToRole(
+      '🚨 Emergency Patient Intake',
+      `Emergency patient ${saved.firstName} ${saved.lastName} (${saved.patientId}) admitted in ${saved.department}. Condition: ${saved.diagnosis || 'Critical'}. Token: ${saved.opdTokenNumber}`,
+      'management',
+      'emergency',
+      saved.id,
+      createdById,
+      `${idempotencyKey}-management`,
+    );
+
+    // 2. Notify Nurses for immediate triage
+    await this.notificationsService.sendToRole(
+      '🚨 Immediate Triage Required',
+      `Emergency patient ${saved.firstName} ${saved.lastName} (${saved.patientId}) - Token: ${saved.opdTokenNumber}`,
+      'nurse',
+      'emergency',
+      saved.id,
+      createdById,
+      `${idempotencyKey}-nurse`,
+    );
+
+    // 3. Notify assigned doctor specifically
+    if (saved.assignedDoctorId) {
+      await this.notificationsService.sendToUser(
+        '🚨 URGENT Emergency Patient Assigned',
+        `Emergency patient ${saved.firstName} ${saved.lastName} (${saved.patientId}) assigned to you! Condition: ${saved.diagnosis || 'Critical'}. OPD Token: ${saved.opdTokenNumber}`,
+        saved.assignedDoctorId,
+        'emergency',
+        saved.id,
+        createdById,
+        `${idempotencyKey}-doctor-${saved.assignedDoctorId}`,
+      );
+    }
+
+    return saved;
+  }
+
+  async completeRegistration(id: string, fullData: Partial<Patient>) {
+    const patient = await this.findOne(id);
+    if (!patient) {
+      throw new NotFoundException('Patient not found');
+    }
+
+    if (fullData.phone && fullData.phone.trim()) {
+      fullData.phone = normalizePhone(fullData.phone);
+    }
+    if (fullData.emergencyPhone && fullData.emergencyPhone.trim()) {
+      fullData.emergencyPhone = normalizePhone(fullData.emergencyPhone);
+    }
+
+    const updatePayload: Partial<Patient> = {
+      ...fullData,
+      isBasicRegistrationComplete: true,
+    };
+
+    await this.patientRepo.update(patient.id, updatePayload);
+    const updated = await this.findOne(patient.id);
+
+    // Notify management & doctor that full registration is completed
+    const idempotencyKey = `complete-reg-${patient.id}-${Date.now()}`;
+    await this.notificationsService.sendToRole(
+      '✅ Emergency Patient Registration Completed',
+      `Emergency patient ${updated?.firstName} ${updated?.lastName} (${updated?.patientId}) registration has been fully updated.`,
+      'management',
+      'registration',
+      patient.id,
+      undefined,
+      `${idempotencyKey}-management`,
+    );
+
+    if (updated?.assignedDoctorId) {
+      await this.notificationsService.sendToUser(
+        '✅ Patient Registration Completed',
+        `Full registration details updated for emergency patient ${updated.firstName} ${updated.lastName} (${updated.patientId}).`,
+        updated.assignedDoctorId,
+        'registration',
+        patient.id,
+        undefined,
+        `${idempotencyKey}-doctor-${updated.assignedDoctorId}`,
+      );
+    }
+
+    return updated;
+  }
+
+  async findPendingEmergency() {
+    return this.patientRepo.find({
+      where: {
+        isEmergency: true,
+        isBasicRegistrationComplete: false,
+      },
+      order: { createdAt: 'DESC' },
+    });
   }
 
   async search(query: string, user?: any) {
