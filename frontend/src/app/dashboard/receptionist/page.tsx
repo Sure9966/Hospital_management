@@ -11,7 +11,8 @@ export default function ReceptionistDashboard() {
   const [pendingEmergency, setPendingEmergency] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const loadData = () => {
+    setLoading(true);
     Promise.all([
       api.get('/management/dashboard'),
       api.get('/receptionist/appointments/today'),
@@ -27,6 +28,10 @@ export default function ReceptionistDashboard() {
       setRecentPatients([]);
       setPendingEmergency([]);
     }).finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadData();
   }, []);
 
   const statusBadge = (s: string) => {
@@ -44,11 +49,14 @@ export default function ReceptionistDashboard() {
           Receptionist Dashboard <span style={{ marginLeft: 8 }}>/ Overview</span>
         </div>
         <div className="flex gap-2">
+          <button className="btn btn-secondary btn-sm" onClick={() => loadData()}>
+            🔄 Refresh Records
+          </button>
           <Link href="/dashboard/receptionist/register?mode=emergency" className="btn btn-primary btn-sm" style={{ background: '#ef4444', borderColor: '#dc2626' }}>
             🚨 Emergency Quick Intake
           </Link>
           <Link href="/dashboard/receptionist/register" className="btn btn-primary btn-sm">
-            + Standard Registration
+            + Patient Registration
           </Link>
           <Link href="/dashboard/receptionist/opd-queue" className="btn btn-secondary btn-sm">
             🎟️ OPD Queue Tokens

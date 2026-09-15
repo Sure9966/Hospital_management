@@ -50,8 +50,12 @@ MediCore HMS is built with a modern, decoupled architecture designed for high av
     [Nurse Dashboard] -> Records Blood Pressure, Heart Rate, SpO2, Temperature.
            │
            ▼
- 3. Doctor Consultation & Clinical Orders
-    [Doctor Dashboard] -> Examines patient, orders Lab Tests & prescribes medications.
+ 3. Doctor Consultation & Action Completion
+    [Doctor Dashboard] -> Examines patient, records diagnosis, orders Lab Tests.
+    -> Doctor clicks 'Complete Action & Generate Small OP PDF'.
+    -> Patient marked COMPLETED & automatically removed from active waiting queue.
+    -> Small OP PDF slip generated with 3-Month Token Validity dates.
+    -> Records moved to Receptionist & Management 'Previous Records'.
            │
            ├─────────────────────────────────────────────┐
            ▼                                             ▼

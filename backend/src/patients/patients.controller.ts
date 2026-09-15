@@ -53,6 +53,11 @@ export class PatientsController {
     return this.patientsService.completeRegistration(id, body);
   }
 
+  @Post(':id/renew-op')
+  renewOpdToken(@Param('id') id: string) {
+    return this.patientsService.renewOpdToken(id);
+  }
+
   @Delete(':id')
   remove(@Param('id') id: string) { return this.patientsService.remove(id); }
 }

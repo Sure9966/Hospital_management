@@ -31,6 +31,12 @@ export class Patient {
   @Column({ nullable: true, unique: true })
   opdTokenNumber: string; // e.g. TK-2026-0042
 
+  @Column({ nullable: true })
+  opdTokenIssuedAt: Date;
+
+  @Column({ nullable: true })
+  opdTokenExpiresAt: Date;
+
   @Column({ nullable: true, unique: true })
   admissionNumber: string; // e.g. IP26000000
 

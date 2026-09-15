@@ -89,10 +89,15 @@ export class PatientsService {
     const opdTokenNumber = `TK-${year}-${seq}`;
     const admissionNumber = `IP${year}${seq}`;
 
+    const opdTokenIssuedAt = data.opdTokenIssuedAt || new Date();
+    const opdTokenExpiresAt = data.opdTokenExpiresAt || new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
+
     const patient = this.patientRepo.create({
       ...data,
       patientId,
       opdTokenNumber,
+      opdTokenIssuedAt,
+      opdTokenExpiresAt,
       admissionNumber,
     });
     const saved = await this.patientRepo.save(patient);
@@ -439,5 +444,30 @@ export class PatientsService {
     }
 
     return qb.orderBy('p.createdAt', 'DESC').take(20).getMany();
+  }
+
+  async renewOpdToken(id: string) {
+    const patient = await this.findOne(id);
+    if (!patient) {
+      throw new NotFoundException('Patient not found');
+    }
+
+    const issuedAt = new Date();
+    const expiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000); // 3 months (90 days)
+
+    patient.opdTokenIssuedAt = issuedAt;
+    patient.opdTokenExpiresAt = expiresAt;
+
+    const saved = await this.patientRepo.save(patient);
+
+    await this.notificationsService.sendToRole(
+      '🔄 OP Token Renewed',
+      `OP Token for patient ${patient.firstName} ${patient.lastName} (${patient.patientId}) has been renewed for 3 months until ${expiresAt.toISOString().split('T')[0]}.`,
+      'receptionist',
+      'registration',
+      patient.id,
+    );
+
+    return saved;
   }
 }

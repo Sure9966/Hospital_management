@@ -39,6 +39,35 @@ export default function OpdQueuePage() {
       });
   }, []);
 
+  const handleRenewToken = async (patientId: string) => {
+    try {
+      toast.loading('Renewing OP Token...', { id: 'renew-token' });
+      await api.post(`/patients/${patientId}/renew-op`);
+      toast.success('🔄 OP Token renewed for 3 months!', { id: 'renew-token' });
+      loadData();
+    } catch {
+      toast.error('Failed to renew OP Token', { id: 'renew-token' });
+    }
+  };
+
+  const downloadOpdSlip = async (patientId: string) => {
+    try {
+      toast.loading('Downloading small OP PDF slip...', { id: 'reception-op-pdf' });
+      const response = await api.get(`/doctor/opd-slip/${patientId}/pdf`, { responseType: 'blob' });
+      const blobUrl = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.setAttribute('download', `${patientId}_opd_slip.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(blobUrl);
+      toast.success('✅ Small OP PDF Slip downloaded successfully', { id: 'reception-op-pdf' });
+    } catch {
+      toast.error('Failed to download OP PDF slip', { id: 'reception-op-pdf' });
+    }
+  };
+
   useEffect(() => {
     const url = quickForm.department ? `/users/doctors?department=${encodeURIComponent(quickForm.department)}` : '/users/doctors';
     api.get(url)
@@ -305,7 +334,9 @@ export default function OpdQueuePage() {
       <div className="topbar">
         <div className="topbar-title">🎟️ OPD Live Queue & Doctor Token Management</div>
         <div className="flex gap-2">
-          {/* <button className="btn btn-primary" onClick={() => openQuickAppt()}>⚡ Quick Walk-in Entry</button> */}
+          <button className="btn btn-secondary" onClick={() => loadData()}>
+            🔄 Refresh Records
+          </button>
           <Link href="/dashboard/receptionist/register" className="btn btn-secondary">+ Register Patient</Link>
         </div>
       </div>
@@ -401,54 +432,114 @@ export default function OpdQueuePage() {
                       <thead>
                         <tr>
                           <th>Time</th>
-                          <th>Patient Info</th>
+                          <th>Patient Info & OPD Token</th>
+                          <th>OP Token Validity (3 Months)</th>
                           <th>Doctor & Dept</th>
                           <th>Queue Status</th>
-                          <th>Quick Action</th>
+                          <th>Actions</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredAppointments.map((a: any) => (
-                          <tr key={a.id}>
-                            <td><strong style={{ color: 'var(--primary-light)' }}>{a.appointmentTime}</strong></td>
-                            <td>
-                              <div style={{ fontWeight: 700 }}>{a.patientName}</div>
-                              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>ID: {a.patientId}</div>
-                            </td>
-                            <td>
-                              <div>Dr. {a.doctorName}</div>
-                              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{a.department}</div>
-                            </td>
-                            <td>
-                              <select
-                                value={a.status}
-                                onChange={e => handleStatusChange(a, e.target.value)}
-                                style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: 8, padding: '4px 8px', fontSize: 12, cursor: 'pointer' }}
-                              >
-                                {['scheduled', 'confirmed', 'in_progress', 'completed', 'cancelled'].map(s => <option key={s} value={s}>{s}</option>)}
-                              </select>
-                            </td>
-                            <td>
-                              {a.status === 'in_progress' ? (
-                                <span className="badge badge-warning" style={{ padding: '4px 10px', fontSize: 12 }}>
-                                  🚪 In Doctor Room
-                                </span>
-                              ) : a.status === 'completed' ? (
-                                <span className="badge badge-gray" style={{ padding: '4px 10px', fontSize: 12 }}>
-                                  ✅ Completed
-                                </span>
-                              ) : (
-                                <button
-                                  className="btn btn-primary btn-sm"
-                                  onClick={() => openSendInModal(a)}
-                                  title="Send patient to Doctor's Consultation Room"
+                        {filteredAppointments.map((a: any) => {
+                          const createdDate = a.createdAt ? new Date(a.createdAt) : new Date();
+                          const issuedAt = a.opdTokenIssuedAt ? new Date(a.opdTokenIssuedAt) : createdDate;
+                          const expiresAt = a.opdTokenExpiresAt
+                            ? new Date(a.opdTokenExpiresAt)
+                            : new Date(issuedAt.getTime() + 90 * 24 * 60 * 60 * 1000);
+
+                          const isTokenValid = new Date() <= expiresAt;
+                          const daysRemaining = Math.max(0, Math.ceil((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+
+                          return (
+                            <tr key={a.id}>
+                              <td><strong style={{ color: 'var(--primary-light)' }}>{a.appointmentTime}</strong></td>
+                              <td>
+                                <div style={{ fontWeight: 700 }}>{a.patientName}</div>
+                                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>ID: {a.patientId}</div>
+                                {a.notes && <div style={{ fontSize: 10, color: '#0ea5e9' }}>{a.notes}</div>}
+                              </td>
+                              <td>
+                                {isTokenValid ? (
+                                  <div>
+                                    <span className="badge badge-success" style={{ fontSize: 11 }}>
+                                      🟢 Valid ({daysRemaining} days left)
+                                    </span>
+                                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+                                      Exp: {expiresAt.toISOString().split('T')[0]}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div>
+                                    <span className="badge badge-danger" style={{ fontSize: 11 }}>
+                                      🔴 Expired (Renewal Required)
+                                    </span>
+                                    <button
+                                      className="btn btn-sm"
+                                      style={{ padding: '2px 6px', fontSize: 10, marginTop: 4, background: '#ef4444', color: '#fff', border: 'none' }}
+                                      onClick={() => handleRenewToken(a.patientId)}
+                                    >
+                                      🔄 Renew Token
+                                    </button>
+                                  </div>
+                                )}
+                              </td>
+                              <td>
+                                <div>Dr. {a.doctorName}</div>
+                                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{a.department}</div>
+                              </td>
+                              <td>
+                                <select
+                                  value={a.status}
+                                  onChange={e => handleStatusChange(a, e.target.value)}
+                                  style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: 8, padding: '4px 8px', fontSize: 12, cursor: 'pointer' }}
                                 >
-                                  🚪 Send In
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
+                                  {['scheduled', 'confirmed', 'in_progress', 'completed', 'cancelled'].map(s => <option key={s} value={s}>{s}</option>)}
+                                </select>
+                              </td>
+                              <td>
+                                <div className="flex gap-1" style={{ flexWrap: 'wrap' }}>
+                                  {a.status === 'in_progress' ? (
+                                    <span className="badge badge-warning" style={{ padding: '4px 8px', fontSize: 11 }}>
+                                      🚪 In Room
+                                    </span>
+                                  ) : a.status === 'completed' ? (
+                                    <span className="badge badge-gray" style={{ padding: '4px 8px', fontSize: 11 }}>
+                                      ✅ Completed
+                                    </span>
+                                  ) : (
+                                    <button
+                                      className="btn btn-primary btn-sm"
+                                      style={{ padding: '3px 8px', fontSize: 11 }}
+                                      onClick={() => openSendInModal(a)}
+                                      title="Send patient to Doctor's Consultation Room"
+                                    >
+                                      🚪 Send In
+                                    </button>
+                                  )}
+
+                                  <button
+                                    className="btn btn-secondary btn-sm"
+                                    style={{ padding: '3px 8px', fontSize: 11 }}
+                                    onClick={() => downloadOpdSlip(a.patientId)}
+                                    title="Download Small OP PDF Slip"
+                                  >
+                                    📄 OP PDF
+                                  </button>
+
+                                  {!isTokenValid && (
+                                    <button
+                                      className="btn btn-sm"
+                                      style={{ padding: '3px 8px', fontSize: 11, background: '#ef4444', color: '#fff', border: 'none' }}
+                                      onClick={() => handleRenewToken(a.patientId)}
+                                    >
+                                      🔄 Renew
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   )}

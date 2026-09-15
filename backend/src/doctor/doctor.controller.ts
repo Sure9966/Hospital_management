@@ -70,4 +70,30 @@ export class DoctorController {
     
     stream.pipe(res);
   }
+
+  @Get('opd-slip/:patientId/pdf')
+  async getOpdSlipPdf(@Param('patientId') patientId: string, @Res() res: Response) {
+    const { stream, filename, mimeType, size } = await this.doctorService.getOpdSlipPdfStream(patientId);
+    res.set({
+      'Content-Type': mimeType,
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Length': size,
+    });
+    stream.pipe(res);
+  }
+
+  @Get('opd-slip/:patientId/consultation/:consultationId/pdf')
+  async getOpdSlipPdfByConsultation(
+    @Param('patientId') patientId: string,
+    @Param('consultationId') consultationId: string,
+    @Res() res: Response,
+  ) {
+    const { stream, filename, mimeType, size } = await this.doctorService.getOpdSlipPdfStream(patientId, consultationId);
+    res.set({
+      'Content-Type': mimeType,
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Length': size,
+    });
+    stream.pipe(res);
+  }
 }

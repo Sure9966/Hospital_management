@@ -11,25 +11,64 @@ export default function ManagementDashboard() {
   const [staff, setStaff] = useState<any[]>([]);
   const [patients, setPatients] = useState<any[]>([]);
   const [dischargeSummaries, setDischargeSummaries] = useState<any[]>([]);
+  const [consultations, setConsultations] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [broadcastForm, setBroadcastForm] = useState({ title: '', message: '', targetRole: '' });
   const [loading, setLoading] = useState(false);
-  const [tab, setTab] = useState<'overview' | 'staff' | 'patients' | 'discharges' | 'broadcast'>('overview');
+  const [tab, setTab] = useState<'overview' | 'staff' | 'patients' | 'discharges' | 'opd_records' | 'broadcast'>('overview');
 
-  useEffect(() => {
+  const loadData = () => {
     api.get('/management/dashboard').then(r => setStats(r.data));
     api.get('/users').then(r => setStaff(r.data));
     api.get('/patients').then(r => setPatients(r.data));
     api.get('/management/discharges').then(r => setDischargeSummaries(r.data)).catch(() => { });
+    api.get('/doctor/consultations').then(r => setConsultations(r.data)).catch(() => { });
+  };
+
+  useEffect(() => {
+    loadData();
   }, []);
+
   useEffect(() => {
     const tabParam = searchParams.get('tab');
-    if (tabParam === 'staff' || tabParam === 'patients' || tabParam === 'discharges' || tabParam === 'broadcast') {
+    if (tabParam === 'staff' || tabParam === 'patients' || tabParam === 'discharges' || tabParam === 'opd_records' || tabParam === 'broadcast') {
       setTab(tabParam as any);
     } else {
       setTab('overview');
     }
   }, [searchParams]);
+
+  const downloadOpdSlipPdf = async (patientId: string, consultationId?: string) => {
+    try {
+      toast.loading('Downloading small OP PDF slip...', { id: 'mgmt-op-pdf' });
+      const urlPath = consultationId
+        ? `/doctor/opd-slip/${patientId}/consultation/${consultationId}/pdf`
+        : `/doctor/opd-slip/${patientId}/pdf`;
+      const response = await api.get(urlPath, { responseType: 'blob' });
+      const blobUrl = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.setAttribute('download', `${patientId}_opd_slip.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(blobUrl);
+      toast.success('✅ Small OP PDF Slip downloaded successfully', { id: 'mgmt-op-pdf' });
+    } catch {
+      toast.error('Failed to download OP PDF slip', { id: 'mgmt-op-pdf' });
+    }
+  };
+
+  const handleRenewToken = async (patientId: string) => {
+    try {
+      toast.loading('Renewing OP Token...', { id: 'mgmt-renew-token' });
+      await api.post(`/patients/${patientId}/renew-op`);
+      toast.success('🔄 OP Token renewed for 3 months!', { id: 'mgmt-renew-token' });
+      api.get('/patients').then(r => setPatients(r.data));
+    } catch {
+      toast.error('Failed to renew OP Token', { id: 'mgmt-renew-token' });
+    }
+  };
 
   const downloadDischargePdf = async (dischargeId: string, patientId: string) => {
     try {
@@ -81,9 +120,12 @@ export default function ManagementDashboard() {
       <div className="topbar">
         <div className="topbar-title">Hospital Management</div>
         <div className="flex gap-2">
-          {(['overview', 'staff', 'patients', 'discharges', 'broadcast'] as const).map(t => (
+          <button className="btn btn-secondary btn-sm" onClick={() => loadData()}>
+            🔄 Refresh Records
+          </button>
+          {(['overview', 'staff', 'patients', 'discharges', 'opd_records', 'broadcast'] as const).map(t => (
             <button key={t} className={`btn btn-sm ${tab === t ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab(t)} style={{ textTransform: 'capitalize' }}>
-              {t === 'overview' ? '📊' : t === 'staff' ? '👥' : t === 'patients' ? '🏥' : t === 'discharges' ? '📋' : '📢'} {t}
+              {t === 'overview' ? '📊 Overview' : t === 'staff' ? '👥 Staff' : t === 'patients' ? '🏥 Patients' : t === 'discharges' ? '📋 Discharges' : t === 'opd_records' ? '📜 Previous OPD Records' : '📢 Broadcast'}
             </button>
           ))}
         </div>
@@ -263,6 +305,102 @@ export default function ManagementDashboard() {
                     </tbody>
                   </table>
                 </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {tab === 'opd_records' && (
+          <div className="card">
+            <div className="card-header flex justify-between items-center" style={{ flexWrap: 'wrap', gap: 12 }}>
+              <span className="card-title">📜 Completed OPD Records & 3-Month Token Validity ({patients.length})</span>
+              <input
+                type="text"
+                className="form-control form-control-sm"
+                placeholder="🔍 Search patient, doctor, diagnosis..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                style={{ width: 260 }}
+              />
+            </div>
+            <div className="table-container">
+              {patients.length === 0 ? (
+                <div className="empty-state">
+                  <div className="empty-icon">📜</div>
+                  <h3>No OPD records found</h3>
+                </div>
+              ) : (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Patient ID & Name</th>
+                      <th>OPD Token No</th>
+                      <th>OP Token 3-Month Validity</th>
+                      <th>Attending Doctor & Dept</th>
+                      <th>Diagnosis / Action</th>
+                      <th>PDF & Renewal Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {patients
+                      .filter(p =>
+                        `${p.firstName} ${p.lastName}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        p.patientId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        (p.opdTokenNumber && p.opdTokenNumber.toLowerCase().includes(searchQuery.toLowerCase())) ||
+                        (p.diagnosis && p.diagnosis.toLowerCase().includes(searchQuery.toLowerCase()))
+                      )
+                      .map(p => {
+                        const issuedAt = p.opdTokenIssuedAt ? new Date(p.opdTokenIssuedAt) : new Date(p.createdAt || Date.now());
+                        const expiresAt = p.opdTokenExpiresAt
+                          ? new Date(p.opdTokenExpiresAt)
+                          : new Date(issuedAt.getTime() + 90 * 24 * 60 * 60 * 1000);
+                        const isTokenValid = new Date() <= expiresAt;
+                        const daysRemaining = Math.max(0, Math.ceil((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+
+                        return (
+                          <tr key={p.id}>
+                            <td>
+                              <strong>{p.firstName} {p.lastName}</strong>
+                              <br /><code style={{ color: 'var(--primary-light)', fontSize: 11 }}>{p.patientId}</code>
+                            </td>
+                            <td>
+                              <span className="badge badge-info">{p.opdTokenNumber || 'N/A'}</span>
+                            </td>
+                            <td>
+                              {isTokenValid ? (
+                                <div>
+                                  <span className="badge badge-success" style={{ fontSize: 11 }}>🟢 Valid ({daysRemaining} days left)</span>
+                                  <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>Exp: {expiresAt.toISOString().split('T')[0]}</div>
+                                </div>
+                              ) : (
+                                <div>
+                                  <span className="badge badge-danger" style={{ fontSize: 11 }}>🔴 Expired (Renewal Required)</span>
+                                  <div style={{ fontSize: 10, color: '#ef4444', marginTop: 2 }}>Expired: {expiresAt.toISOString().split('T')[0]}</div>
+                                </div>
+                              )}
+                            </td>
+                            <td>
+                              <div>{p.assignedDoctorName || p.admittedBy || 'Doctor'}</div>
+                              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{p.department || 'General'}</div>
+                            </td>
+                            <td>{p.diagnosis || 'General OPD Visit Completed'}</td>
+                            <td>
+                              <div className="flex gap-2">
+                                <button className="btn btn-secondary btn-sm" onClick={() => downloadOpdSlipPdf(p.patientId)}>
+                                  📄 OP PDF
+                                </button>
+                                {!isTokenValid && (
+                                  <button className="btn btn-sm" style={{ background: '#ef4444', color: '#fff', border: 'none' }} onClick={() => handleRenewToken(p.patientId)}>
+                                    🔄 Renew
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
               )}
             </div>
           </div>

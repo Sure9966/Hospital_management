@@ -95,6 +95,31 @@ export default function DoctorDashboard() {
   });
   const [savingBedRequest, setSavingBedRequest] = useState(false);
   const [bedRequests, setBedRequests] = useState<any[]>([]);
+  const [tabletSortOrder, setTabletSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  const sortedStoreTablets = [...storeTablets].sort((a, b) => {
+    const nameA = (a.name || '').toLowerCase();
+    const nameB = (b.name || '').toLowerCase();
+    return tabletSortOrder === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
+  });
+
+  const handleQuickMarkCompleted = async (patientId: string, patientName: string, docName: string) => {
+    try {
+      toast.loading('Marking patient consultation as completed...', { id: 'complete-opd' });
+      await api.post('/doctor/consultations', {
+        patientId,
+        patientName,
+        admittedByDoctor: docName || doctorFullName,
+        status: 'completed',
+        diagnosis: 'OPD Consultation Completed',
+        consultationNotes: 'Doctor marked action completed',
+      });
+      toast.success('✅ Patient marked as Completed! Moved to Receptionist & Management records.', { id: 'complete-opd' });
+      loadData();
+    } catch {
+      toast.error('Failed to mark patient as completed', { id: 'complete-opd' });
+    }
+  };
 
   // Resolve Doctor Name and Doctor ID
   const doctorFullName = currentUser
@@ -324,6 +349,13 @@ export default function DoctorDashboard() {
       }
 
       setShowConsultModal(false);
+      
+      if (payload.status === 'completed') {
+        toast.success('✅ OPD Action Completed! Patient removed from active queue.');
+      } else {
+        toast.success('✅ Consultation Notes Saved!');
+      }
+
       setConsultForm({ ...emptyConsultationForm });
       loadData();
     } catch (err: any) {
@@ -501,6 +533,27 @@ export default function DoctorDashboard() {
     }
   };
 
+  const downloadOpdSlipPdf = async (patientId: string, consultationId?: string) => {
+    try {
+      toast.loading('Generating small OP PDF slip...', { id: 'opd-slip-pdf' });
+      const urlPath = consultationId
+        ? `/doctor/opd-slip/${patientId}/consultation/${consultationId}/pdf`
+        : `/doctor/opd-slip/${patientId}/pdf`;
+      const response = await api.get(urlPath, { responseType: 'blob' });
+      const blobUrl = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.setAttribute('download', `${patientId}_opd_slip.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(blobUrl);
+      toast.success('✅ Small OP PDF Slip downloaded successfully', { id: 'opd-slip-pdf' });
+    } catch {
+      toast.error('Failed to generate OP PDF slip', { id: 'opd-slip-pdf' });
+    }
+  };
+
   const filteredPatients = patients.filter(p =>
     `${p.firstName} ${p.lastName}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
     p.patientId.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -518,6 +571,9 @@ export default function DoctorDashboard() {
           </div>
         </div>
         <div className="flex gap-2">
+          <button className="btn btn-secondary" onClick={() => loadData()}>
+            🔄 Refresh Records
+          </button>
           <button className="btn btn-primary" onClick={() => { setConsultForm({ ...emptyConsultationForm, admittedByDoctor: doctorFullName }); setShowConsultModal(true); }}>
             📝 Add Consultation Note
           </button>
@@ -574,60 +630,69 @@ export default function DoctorDashboard() {
         </div>
 
         {/* TAB 1: Today OPD Queue */}
-        {activeTab === 'queue' && (
-          <div className="card">
-            <div className="card-header">
-              <span className="card-title">📅 My OPD Consultation Waiting Queue Today ({appointments.length})</span>
-            </div>
-            <div className="table-container">
-              {appointments.length === 0 ? (
-                <div className="empty-state"><div className="empty-icon">📅</div><h3>No OPD patients queued today</h3></div>
-              ) : (
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Time</th>
-                      <th>Patient Name & ID</th>
-                      <th>Reason / Complaint</th>
-                      <th>Attending Doctor (Visible to Patient)</th>
-                      <th>Status</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {appointments.map(a => (
-                      <tr key={a.id}>
-                        <td><strong>{a.appointmentTime}</strong></td>
-                        <td>
-                          <strong>{a.patientName}</strong>
-                          <br /><span className="text-muted text-xs">{a.patientId}</span>
-                        </td>
-                        <td>{a.reason || 'General OPD Consultation'}</td>
-                        <td>
-                          <span className="badge badge-info">{a.doctorName}</span>
-                        </td>
-                        <td><span className={statusBadge(a.status)}>{a.status}</span></td>
-                        <td>
-                          <div className="flex gap-2">
-                            <button className="btn btn-primary btn-sm" onClick={() => {
-                              setConsultForm(f => ({ ...f, patientId: a.patientId, patientName: a.patientName, admittedByDoctor: a.doctorName || doctorFullName }));
-                              setShowConsultModal(true);
-                            }}>
-                              📝 Consult
-                            </button>
-                            <button className="btn btn-secondary btn-sm" onClick={() => handleOpenEhr(a.patientId)}>
-                              📂 Open EHR
-                            </button>
-                          </div>
-                        </td>
+        {activeTab === 'queue' && (() => {
+          const activeAppts = appointments.filter(a => a.status !== 'completed');
+          return (
+            <div className="card">
+              <div className="card-header flex justify-between items-center">
+                <span className="card-title">📅 My OPD Consultation Waiting Queue Today ({activeAppts.length})</span>
+                <button className="btn btn-secondary btn-sm" onClick={() => loadData()}>
+                  🔄 Refresh Records
+                </button>
+              </div>
+              <div className="table-container">
+                {activeAppts.length === 0 ? (
+                  <div className="empty-state"><div className="empty-icon">📅</div><h3>No active OPD patients queued today</h3><p>Completed patient consultations are moved to previous records.</p></div>
+                ) : (
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Time</th>
+                        <th>Patient Name & ID</th>
+                        <th>Reason / Complaint</th>
+                        <th>Attending Doctor (Visible to Patient)</th>
+                        <th>Status</th>
+                        <th>Actions</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
+                    </thead>
+                    <tbody>
+                      {activeAppts.map(a => (
+                        <tr key={a.id}>
+                          <td><strong>{a.appointmentTime}</strong></td>
+                          <td>
+                            <strong>{a.patientName}</strong>
+                            <br /><span className="text-muted text-xs">{a.patientId}</span>
+                          </td>
+                          <td>{a.reason || 'General OPD Consultation'}</td>
+                          <td>
+                            <span className="badge badge-info">{a.doctorName}</span>
+                          </td>
+                          <td><span className={statusBadge(a.status)}>{a.status}</span></td>
+                          <td>
+                            <div className="flex gap-2">
+                              <button className="btn btn-primary btn-sm" onClick={() => {
+                                setConsultForm(f => ({ ...f, patientId: a.patientId, patientName: a.patientName, admittedByDoctor: a.doctorName || doctorFullName, status: 'completed' }));
+                                setShowConsultModal(true);
+                              }}>
+                                📝 Consult & Complete
+                              </button>
+                              <button className="btn btn-secondary btn-sm" style={{ background: 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', border: 'none' }} onClick={() => handleQuickMarkCompleted(a.patientId, a.patientName, a.doctorName)}>
+                                ✅ Mark Completed
+                              </button>
+                              <button className="btn btn-secondary btn-sm" onClick={() => handleOpenEhr(a.patientId)}>
+                                📂 EHR
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* TAB 2: Patient Records & Files */}
         {activeTab === 'patients' && (
@@ -1236,11 +1301,16 @@ export default function DoctorDashboard() {
                 </div>
               </div>
 
-              <div className="modal-footer">
+              <div className="modal-footer" style={{ justifyContent: 'space-between' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setShowConsultModal(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary" disabled={savingConsult}>
-                  {savingConsult ? '⏳ Saving...' : '📝 Save Consultation Notes & Orders'}
-                </button>
+                <div className="flex gap-2">
+                  <button type="submit" className="btn btn-secondary" disabled={savingConsult} onClick={() => setConsultForm(f => ({ ...f, status: 'in_progress' }))}>
+                    📝 Save Draft Notes
+                  </button>
+                  <button type="submit" className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none' }} disabled={savingConsult} onClick={() => setConsultForm(f => ({ ...f, status: 'completed' }))}>
+                    {savingConsult ? '⏳ Processing...' : '✅ Complete Action & Mark Completed'}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -1282,7 +1352,15 @@ export default function DoctorDashboard() {
                     <div style={{ fontSize: 13 }}>
                       <strong>🏬 Pharmacy Store Inventory:</strong> {storeTablets.length} tablet types available in stock
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 items-center">
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        style={{ padding: '4px 10px', fontSize: 12, fontWeight: 700 }}
+                        onClick={() => setTabletSortOrder(o => o === 'asc' ? 'desc' : 'asc')}
+                      >
+                        🔤 Sort: {tabletSortOrder === 'asc' ? 'A(a) ➔ Z(z)' : 'Z(z) ➔ A(a)'}
+                      </button>
                       <select
                         className="form-control form-control-sm"
                         style={{ width: 270 }}
@@ -1309,8 +1387,8 @@ export default function DoctorDashboard() {
                           }
                         }}
                       >
-                        <option value="">+ Quick Pick Store Tablet...</option>
-                        {storeTablets.map(t => (
+                        <option value="">+ Quick Pick Store Tablet ({tabletSortOrder === 'asc' ? 'A-Z' : 'Z-A'})...</option>
+                        {sortedStoreTablets.map(t => (
                           <option key={t.id} value={t.id}>
                             💊 {t.name} ({t.power}) - ₹{t.price} (Stock: {t.stockQuantity})
                           </option>
@@ -1352,7 +1430,7 @@ export default function DoctorDashboard() {
                               required
                             />
                             <datalist id={`store-tablets-${idx}`}>
-                              {storeTablets.map((t: any) => (
+                              {sortedStoreTablets.map((t: any) => (
                                 <option key={t.id} value={`${t.name} ${t.power}`}>
                                   ₹{t.price} | Stock: {t.stockQuantity} ({t.category || 'General'})
                                 </option>

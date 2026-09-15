@@ -376,7 +376,7 @@ function RegisterPatientContent() {
     <DashboardLayout role="receptionist">
       <div className="topbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div className="topbar-title">Receptionist Patient Registration & Emergency Intake</div>
-        
+
         {/* Navigation Mode Selector Tabs */}
         <div className="flex gap-2" style={{ background: 'var(--bg-surface)', padding: 4, borderRadius: 10, border: '1px solid var(--border-color)' }}>
           <button
@@ -384,7 +384,7 @@ function RegisterPatientContent() {
             className={`btn btn-sm ${mode === 'standard' ? 'btn-primary' : 'btn-secondary'}`}
             onClick={() => { setMode('standard'); setCreatedPatient(null); setFormErrors({}); }}
           >
-            📋 Standard Registration
+            📋 Patient Registration
           </button>
           <button
             type="button"

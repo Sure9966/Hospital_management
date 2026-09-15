@@ -73,6 +73,14 @@ export class DoctorService {
       }
     }
 
+    // If consultation is completed, update appointment status to completed so patient is removed from doctor active OPD queue
+    if (saved.patientId && (saved.status === ConsultationStatus.COMPLETED || String(saved.status) === 'completed')) {
+      await this.appointmentRepo.update(
+        { patientId: saved.patientId },
+        { status: 'completed' as any },
+      );
+    }
+
     // Send notification to nurse about consultation
     const idempotencyKey = `consultation-${saved.id}-${Date.now()}`;
     await this.notificationsService.sendToRole(
@@ -753,6 +761,147 @@ export class DoctorService {
       filename: `${discharge.patientId}_discharge.pdf`,
       mimeType: 'application/pdf',
       size: fs.statSync(fullPath).size,
+    };
+  }
+
+  async getOpdSlipPdfStream(patientId: string, consultationId?: string) {
+    const patient = await this.findPatientSafely(patientId);
+    if (!patient) {
+      throw new NotFoundException('Patient record not found');
+    }
+
+    let consultation: DoctorConsultation | null = null;
+    if (consultationId && isUuid(consultationId)) {
+      consultation = await this.consultationRepo.findOne({ where: { id: consultationId } });
+    }
+    if (!consultation) {
+      consultation = await this.consultationRepo.findOne({
+        where: { patientId: patient.patientId },
+        order: { createdAt: 'DESC' },
+      });
+    }
+
+    const tempPdfPath = path.join(this.storageDir, `opd_${patient.patientId}_${Date.now()}.pdf`);
+
+    const issuedAt = patient.opdTokenIssuedAt ? new Date(patient.opdTokenIssuedAt) : new Date(patient.createdAt || Date.now());
+    const expiresAt = patient.opdTokenExpiresAt
+      ? new Date(patient.opdTokenExpiresAt)
+      : new Date(issuedAt.getTime() + 90 * 24 * 60 * 60 * 1000);
+
+    const now = new Date();
+    const isValid = now <= expiresAt;
+    const validityStatusStr = isValid ? 'VALID (ACTIVE OP TOKEN)' : 'EXPIRED (RENEWAL REQUIRED)';
+
+    await new Promise<void>((resolve, reject) => {
+      const doc = new PDFDocument({ margin: 30, size: 'A4' });
+      const stream = fs.createWriteStream(tempPdfPath);
+      doc.pipe(stream);
+
+      const PAGE_LEFT = 30;
+      const PAGE_RIGHT = 565;
+      const PAGE_WIDTH = PAGE_RIGHT - PAGE_LEFT;
+
+      // Hospital Header
+      doc
+        .fillColor('#0f172a')
+        .fontSize(16)
+        .font('Helvetica-Bold')
+        .text('NEUROSTAR MULTISPECIALITY HOSPITAL', PAGE_LEFT, 30, { width: PAGE_WIDTH, align: 'center' });
+
+      doc
+        .fontSize(8)
+        .font('Helvetica')
+        .fillColor('#475569')
+        .text('67-19-1, Opp Ashram School, Nagamalli thota, Kakinada 533003, India', PAGE_LEFT, 50, { width: PAGE_WIDTH, align: 'center' })
+        .text('Phone: 7396333335 | Email: neurostarhospital@gmail.com', { width: PAGE_WIDTH, align: 'center' });
+
+      // Title Bar
+      const titleY = 75;
+      doc.rect(PAGE_LEFT, titleY, PAGE_WIDTH, 22).fill('#0284c7');
+      doc
+        .fillColor('#ffffff')
+        .fontSize(11)
+        .font('Helvetica-Bold')
+        .text('OPD CONSULTATION & TOKEN SLIP', PAGE_LEFT, titleY + 5, { width: PAGE_WIDTH, align: 'center' });
+
+      let y = titleY + 30;
+      const rowH = 16;
+      const LABEL_W = 110;
+      const VALUE_W = (PAGE_WIDTH / 2) - LABEL_W;
+
+      const drawRow = (l1: string, v1: string, l2: string, v2: string) => {
+        doc.rect(PAGE_LEFT, y, LABEL_W + VALUE_W, rowH).stroke('#cbd5e1');
+        doc.fillColor('#1e293b').fontSize(8).font('Helvetica-Bold').text(l1, PAGE_LEFT + 5, y + 4, { width: LABEL_W - 5 });
+        doc.fillColor('#0f172a').fontSize(8).font('Helvetica').text(v1 || '—', PAGE_LEFT + LABEL_W + 5, y + 4, { width: VALUE_W - 10 });
+
+        const x2 = PAGE_LEFT + LABEL_W + VALUE_W;
+        doc.rect(x2, y, LABEL_W + VALUE_W, rowH).stroke('#cbd5e1');
+        doc.fillColor('#1e293b').fontSize(8).font('Helvetica-Bold').text(l2, x2 + 5, y + 4, { width: LABEL_W - 5 });
+        doc.fillColor('#0f172a').fontSize(8).font('Helvetica').text(v2 || '—', x2 + LABEL_W + 5, y + 4, { width: VALUE_W - 10 });
+        y += rowH;
+      };
+
+      drawRow('OPD TOKEN NO:', patient.opdTokenNumber || 'N/A', 'PATIENT ID:', patient.patientId);
+      drawRow('PATIENT NAME:', `${patient.firstName} ${patient.lastName}`, 'GENDER / DOB:', `${patient.gender || 'N/A'} / ${patient.dateOfBirth || 'N/A'}`);
+      drawRow('PHONE NUMBER:', patient.phone || 'N/A', 'BLOOD GROUP:', patient.bloodGroup || 'N/A');
+      drawRow('TOKEN ISSUE DATE:', issuedAt.toISOString().split('T')[0], 'TOKEN EXPR DATE:', expiresAt.toISOString().split('T')[0]);
+      drawRow('TOKEN VALIDITY:', validityStatusStr, 'VISIT STATUS:', 'COMPLETED');
+      drawRow('ATTENDING DOCTOR:', consultation?.doctorName || patient.assignedDoctorName || 'Doctor', 'DEPARTMENT:', patient.department || 'General');
+
+      y += 15;
+      doc.rect(PAGE_LEFT, y, PAGE_WIDTH, 18).fill('#0f172a');
+      doc.fillColor('#ffffff').fontSize(10).font('Helvetica-Bold').text('CLINICAL DIAGNOSIS & CONSULTATION DETAILS', PAGE_LEFT + 8, y + 4);
+      y += 24;
+
+      doc.fillColor('#1e293b').fontSize(9).font('Helvetica-Bold').text('DIAGNOSIS & CLINICAL FINDINGS:', PAGE_LEFT, y);
+      y += 12;
+      doc.fillColor('#334155').fontSize(9).font('Helvetica').text(consultation?.diagnosis || patient.diagnosis || 'General OPD Consultation', PAGE_LEFT, y, { width: PAGE_WIDTH });
+      y += 20;
+
+      if (consultation?.consultationNotes) {
+        doc.fillColor('#1e293b').fontSize(9).font('Helvetica-Bold').text('DOCTOR CONSULTATION NOTES:', PAGE_LEFT, y);
+        y += 12;
+        doc.fillColor('#334155').fontSize(9).font('Helvetica').text(consultation.consultationNotes, PAGE_LEFT, y, { width: PAGE_WIDTH });
+        y += 25;
+      }
+
+      if (consultation?.testOrders && consultation.testOrders.length > 0) {
+        doc.fillColor('#1e293b').fontSize(9).font('Helvetica-Bold').text('PRESCRIBED DIAGNOSTIC & LAB TESTS:', PAGE_LEFT, y);
+        y += 12;
+        doc.fillColor('#0284c7').fontSize(9).font('Helvetica').text(consultation.testOrders.join(', '), PAGE_LEFT, y, { width: PAGE_WIDTH });
+        y += 20;
+      }
+
+      if (consultation?.followUpDate) {
+        doc.fillColor('#1e293b').fontSize(9).font('Helvetica-Bold').text('FOLLOW-UP APPOINTMENT:', PAGE_LEFT, y);
+        y += 12;
+        doc.fillColor('#334155').fontSize(9).font('Helvetica').text(`Scheduled Date: ${consultation.followUpDate} (${consultation.followUpInstructions || 'Routine Checkup'})`, PAGE_LEFT, y, { width: PAGE_WIDTH });
+        y += 20;
+      }
+
+      y = Math.max(y + 30, 680);
+      doc.rect(PAGE_LEFT, y, PAGE_WIDTH, 1).fill('#cbd5e1');
+      y += 10;
+      doc.fillColor('#475569').fontSize(8).font('Helvetica-Bold').text('ATTENDING PHYSICIAN SIGNATURE:', PAGE_LEFT, y);
+      doc.fillColor('#475569').fontSize(8).font('Helvetica-Bold').text('HOSPITAL STAMP & AUTHORIZATION', PAGE_RIGHT - 180, y, { width: 180, align: 'right' });
+      y += 12;
+      doc.fillColor('#64748b').fontSize(8).font('Helvetica').text(consultation?.doctorName || patient.assignedDoctorName || 'Doctor', PAGE_LEFT, y);
+      y += 12;
+      doc.fillColor('#0284c7').fontSize(8).font('Helvetica-Bold').text('Token Valid for 3 Months from Issuance Date. Token renewal required after 3 months.', PAGE_LEFT, y, { width: PAGE_WIDTH, align: 'center' });
+
+      doc.end();
+
+      stream.on('finish', () => resolve());
+      stream.on('error', err => reject(err));
+    });
+
+    const stats = fs.statSync(tempPdfPath);
+    const readStream = fs.createReadStream(tempPdfPath);
+    return {
+      stream: readStream,
+      filename: `${patient.patientId}_opd_slip.pdf`,
+      mimeType: 'application/pdf',
+      size: stats.size,
     };
   }
 }

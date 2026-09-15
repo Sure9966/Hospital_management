@@ -213,6 +213,11 @@
 - **Method**: `GET`
 - **URL**: `http://localhost:3001/api/doctor/discharges/:dischargeId/pdf`
 
+### 5.6 Download Small OP PDF Slip & Token Document
+- **Method**: `GET`
+- **URL**: `http://localhost:3001/api/doctor/opd-slip/:patientId/pdf`
+- **Description**: Generates and downloads a small OP PDF slip containing patient details, token number, doctor name, diagnosis, clinical notes, and 3-month token validity dates.
+
 ---
 
 ## 💉 6. Nurse Portal & Vitals Tracking (`/api/nurse`)
