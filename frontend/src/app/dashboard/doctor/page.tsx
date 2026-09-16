@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
@@ -95,7 +95,25 @@ export default function DoctorDashboard() {
   });
   const [savingBedRequest, setSavingBedRequest] = useState(false);
   const [bedRequests, setBedRequests] = useState<any[]>([]);
+  const [allAdmissions, setAllAdmissions] = useState<any[]>([]);
+  const [selectedAllocatedInfo, setSelectedAllocatedInfo] = useState<any | null>(null);
   const [tabletSortOrder, setTabletSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  const getPatientAllocatedBed = (patientId: string) => {
+    const match = (allAdmissions || []).find(
+      (a: any) => (a.patientId === patientId) && (a.status === 'admitted' || a.allocatedBedNumber)
+    );
+    if (match) {
+      return {
+        allocatedBedNumber: match.allocatedBedNumber || 'Allocated',
+        allocatedRoomNumber: match.allocatedRoomNumber || 'Room 101',
+        allocatedWardName: match.allocatedWardName || match.requestedWard || 'General',
+        allocatedBedType: match.allocatedBedType || 'Standard',
+        status: match.status,
+      };
+    }
+    return null;
+  };
 
   const sortedStoreTablets = [...storeTablets].sort((a, b) => {
     const nameA = (a.name || '').toLowerCase();
@@ -150,7 +168,7 @@ export default function DoctorDashboard() {
       .catch(() => setEligibleDoctors([]));
   }, [assignDepartment]);
 
-  const loadData = () => {
+  const loadData = useCallback(() => {
     setLoading(true);
     const user = getUser();
     Promise.all([
@@ -173,6 +191,7 @@ export default function DoctorDashboard() {
         setDischarges(dischargeRes.data || []);
         setStoreTablets(tabletRes.data || []);
         setLabTests(labRes.data || []);
+        setAllAdmissions(admRes.data || []);
 
         // Only show bed requests submitted for or by this doctor
         const myRequests = (admRes.data || []).filter((a: any) =>
@@ -191,11 +210,18 @@ export default function DoctorDashboard() {
       })
       .catch(() => toast.error('Failed to load doctor dashboard records'))
       .finally(() => setLoading(false));
-  };
+  }, []);
 
   useEffect(() => {
     loadData();
-  }, []);
+    const handleEvent = () => loadData();
+    window.addEventListener('hospital-data-refresh', handleEvent);
+    window.addEventListener('focus', handleEvent);
+    return () => {
+      window.removeEventListener('hospital-data-refresh', handleEvent);
+      window.removeEventListener('focus', handleEvent);
+    };
+  }, [loadData]);
 
   useEffect(() => {
     const tab = searchParams.get('tab');
@@ -386,8 +412,12 @@ export default function DoctorDashboard() {
         : i.medicineName.trim();
       return {
         name,
+        medicineName: i.medicineName.trim(),
+        power: i.power?.trim() || '500mg',
         dosage: i.dosage?.trim() || `${i.power || '500mg'} - As directed`,
         duration: i.duration?.trim() || '5 days',
+        route: (i as any).route || 'Oral',
+        timing: (i as any).timing || 'After Meals',
         quantity: Number(i.quantity) || 1,
         unitCost: Number(i.unitPrice) || 0,
         lineTotal: (Number(i.quantity) || 1) * (Number(i.unitPrice) || 0),
@@ -669,18 +699,54 @@ export default function DoctorDashboard() {
                           </td>
                           <td><span className={statusBadge(a.status)}>{a.status}</span></td>
                           <td>
-                            <div className="flex gap-2">
-                              <button className="btn btn-primary btn-sm" onClick={() => {
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%', minWidth: 170 }}>
+                              <button className="btn btn-primary btn-sm w-full" onClick={() => {
                                 setConsultForm(f => ({ ...f, patientId: a.patientId, patientName: a.patientName, admittedByDoctor: a.doctorName || doctorFullName, status: 'completed' }));
                                 setShowConsultModal(true);
                               }}>
                                 📝 Consult & Complete
                               </button>
-                              <button className="btn btn-secondary btn-sm" style={{ background: 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', border: 'none' }} onClick={() => handleQuickMarkCompleted(a.patientId, a.patientName, a.doctorName)}>
+
+                              {/* Bed Allocate Vertical Action Button */}
+                              {(() => {
+                                const alloc = getPatientAllocatedBed(a.patientId);
+                                if (alloc) {
+                                  return (
+                                    <button
+                                      className="btn btn-sm w-full"
+                                      style={{ background: 'linear-gradient(135deg, #10b981, #14b8a6)', color: '#fff', border: 'none', fontWeight: 700, fontSize: 11, padding: '4px 8px' }}
+                                      onClick={() => setSelectedAllocatedInfo({ ...alloc, patientName: a.patientName, patientId: a.patientId })}
+                                    >
+                                      🛏️ Allocated: {alloc.allocatedRoomNumber || 'Room'} | {alloc.allocatedBedNumber}
+                                    </button>
+                                  );
+                                }
+                                return (
+                                  <button
+                                    className="btn btn-secondary btn-sm w-full"
+                                    style={{ background: 'rgba(99,102,241,0.12)', color: '#818cf8', border: '1px solid #6366f1', fontWeight: 700, fontSize: 11, padding: '4px 8px' }}
+                                    onClick={() => {
+                                      setBedRequestForm({
+                                        patientId: a.patientId,
+                                        patientName: a.patientName,
+                                        doctorName: a.doctorName || doctorFullName,
+                                        diagnosis: a.reason || 'OPD Inpatient Bed Request',
+                                        requestedWard: 'General',
+                                        notes: '',
+                                      });
+                                      setShowBedRequestModal(true);
+                                    }}
+                                  >
+                                    🛏️ Bed Allocate
+                                  </button>
+                                );
+                              })()}
+
+                              <button className="btn btn-secondary btn-sm w-full" style={{ background: 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', border: 'none', fontSize: 11, padding: '4px 8px' }} onClick={() => handleQuickMarkCompleted(a.patientId, a.patientName, a.doctorName)}>
                                 ✅ Mark Completed
                               </button>
-                              <button className="btn btn-secondary btn-sm" onClick={() => handleOpenEhr(a.patientId)}>
-                                📂 EHR
+                              <button className="btn btn-secondary btn-sm w-full" style={{ fontSize: 11, padding: '4px 8px' }} onClick={() => handleOpenEhr(a.patientId)}>
+                                📂 EHR Profile
                               </button>
                             </div>
                           </td>
@@ -783,24 +849,61 @@ export default function DoctorDashboard() {
                           <div
                             style={{
                               display: 'flex',
+                              flexDirection: 'column',
                               gap: 6,
-                              flexWrap: 'wrap',
+                              minWidth: 170,
                             }}
                           >
                             <button
-                              className="btn btn-primary btn-sm"
+                              className="btn btn-primary btn-sm w-full"
+                              style={{ fontSize: 11, padding: '4px 8px' }}
                               onClick={() => handleOpenEhr(p.patientId)}
                             >
                               📂 Open EHR
                             </button>
 
+                            {/* Bed Allocate Vertical Action Button */}
+                            {(() => {
+                              const alloc = getPatientAllocatedBed(p.patientId) || (p.bedNumber ? { allocatedBedNumber: p.bedNumber, allocatedRoomNumber: p.ward || 'Room', allocatedWardName: 'Ward' } : null);
+                              if (alloc) {
+                                return (
+                                  <button
+                                    className="btn btn-sm w-full"
+                                    style={{ background: 'linear-gradient(135deg, #10b981, #14b8a6)', color: '#fff', border: 'none', fontWeight: 700, fontSize: 11, padding: '4px 8px', textAlign: 'left' }}
+                                    onClick={() => setSelectedAllocatedInfo({ ...alloc, patientName: `${p.firstName} ${p.lastName}`, patientId: p.patientId })}
+                                  >
+                                    🛏️ Allocated: {alloc.allocatedRoomNumber} | {alloc.allocatedBedNumber}
+                                  </button>
+                                );
+                              }
+                              return (
+                                <button
+                                  className="btn btn-secondary btn-sm w-full"
+                                  style={{ background: 'rgba(99,102,241,0.12)', color: '#818cf8', border: '1px solid #6366f1', fontWeight: 700, fontSize: 11, padding: '4px 8px' }}
+                                  onClick={() => {
+                                    setBedRequestForm({
+                                      patientId: p.patientId,
+                                      patientName: `${p.firstName} ${p.lastName}`,
+                                      doctorName: doctorFullName,
+                                      diagnosis: p.diagnosis || '',
+                                      requestedWard: 'General',
+                                      notes: '',
+                                    });
+                                    setShowBedRequestModal(true);
+                                  }}
+                                >
+                                  🛏️ Bed Allocate
+                                </button>
+                              );
+                            })()}
+
                             {p.status !== 'discharged' && (
-                              <button type="button" className="btn btn-sm" style={{ background: '#10b981', color: '#fff', border: 'none', }} onClick={() => openDischargeModal(p)}>
+                              <button type="button" className="btn btn-sm w-full" style={{ background: '#10b981', color: '#fff', border: 'none', fontSize: 11, padding: '4px 8px' }} onClick={() => openDischargeModal(p)}>
                                 ✅ Discharge
                               </button>
                             )}
                             {p.status === 'discharged' && (
-                              <button type="button" className="btn btn-sm" style={{ background: '#c60938ff', color: '#fff', border: 'none', }} onClick={() => openDischargeModal(p)}>
+                              <button type="button" className="btn btn-sm w-full" style={{ background: '#c60938ff', color: '#fff', border: 'none', fontSize: 11, padding: '4px 8px' }} onClick={() => openDischargeModal(p)}>
                                 ✅ Discharged
                               </button>
                             )}
@@ -1495,9 +1598,41 @@ export default function DoctorDashboard() {
                           </div>
                         </div>
 
-                        {/* Dosage Frequency & Duration row */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 8, paddingTop: 8, borderTop: '1px dashed var(--border)' }}>
-                          <div className="flex items-center gap-2">
+                        {/* Dosage Frequency, Route & Duration row */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, marginTop: 8, paddingTop: 8, borderTop: '1px dashed var(--border)' }}>
+                          <div className="flex items-center gap-1.5">
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Route (How to take):</span>
+                            <select
+                              className="form-control form-control-sm"
+                              value={item.route || 'Oral'}
+                              onChange={e => updateItem(idx, 'route', e.target.value)}
+                            >
+                              <option value="Oral">👄 Oral (By Mouth)</option>
+                              <option value="IV">💉 IV (Intravenous)</option>
+                              <option value="IM">💉 IM (Intramuscular)</option>
+                              <option value="SC">💉 SC (Subcutaneous)</option>
+                              <option value="Topical">🧴 Topical (Skin)</option>
+                              <option value="Inhalation">🫁 Inhalation</option>
+                              <option value="Drops">💧 Eye/Ear Drops</option>
+                            </select>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Timing:</span>
+                            <select
+                              className="form-control form-control-sm"
+                              value={item.timing || 'AFTER MEALS'}
+                              onChange={e => updateItem(idx, 'timing', e.target.value)}
+                            >
+                              <option value="AFTER MEALS">🍽️ After Meals</option>
+                              <option value="BEFORE MEALS">🥗 Before Meals</option>
+                              <option value="WITH MEALS">🍲 With Meals</option>
+                              <option value="EVERY 6 HOURS">⏱️ Every 6 Hours</option>
+                              <option value="EVERY 8 HOURS">⏱️ Every 8 Hours</option>
+                              <option value="EVERY 12 HOURS">⏱️ Every 12 Hours</option>
+                              <option value="AT BEDTIME">🌙 At Bedtime</option>
+                            </select>
+                          </div>
+                          <div className="flex items-center gap-1.5">
                             <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Frequency:</span>
                             <input
                               className="form-control form-control-sm"
@@ -1506,7 +1641,7 @@ export default function DoctorDashboard() {
                               onChange={e => updateItem(idx, 'dosage', e.target.value)}
                             />
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1.5">
                             <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Duration:</span>
                             <input
                               className="form-control form-control-sm"
@@ -2095,6 +2230,52 @@ export default function DoctorDashboard() {
               </div>
 
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Allocated Bed Details display */}
+      {selectedAllocatedInfo && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setSelectedAllocatedInfo(null)}>
+          <div className="modal" style={{ maxWidth: 440 }}>
+            <div className="modal-header">
+              <h3>🛏️ Allocated Bed & Room Status</h3>
+              <button className="btn btn-secondary btn-sm btn-icon" onClick={() => setSelectedAllocatedInfo(null)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <div style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid #10b981', padding: 14, borderRadius: 10, marginBottom: 16 }}>
+                <div style={{ fontSize: 11, color: '#10b981', fontWeight: 800 }}>✓ BED ALLOCATED BY RECEPTION / MANAGEMENT</div>
+                <div style={{ fontSize: 16, fontWeight: 800, marginTop: 4, color: 'var(--text-main)' }}>{selectedAllocatedInfo.patientName}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Patient ID: <code>{selectedAllocatedInfo.patientId}</code></div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, fontSize: 13, marginBottom: 16 }}>
+                <div style={{ background: 'var(--bg-surface)', padding: 12, borderRadius: 10, border: '1px solid var(--border)' }}>
+                  <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 700 }}>ALLOCATED ROOM</span>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: '#0ea5e9', marginTop: 2 }}>🚪 {selectedAllocatedInfo.allocatedRoomNumber || 'Room 101'}</div>
+                </div>
+                <div style={{ background: 'var(--bg-surface)', padding: 12, borderRadius: 10, border: '1px solid var(--border)' }}>
+                  <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 700 }}>BED CODE / NUMBER</span>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: '#818cf8', marginTop: 2 }}>🛏️ {selectedAllocatedInfo.allocatedBedNumber}</div>
+                </div>
+              </div>
+
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
+                Ward Section: <strong>{selectedAllocatedInfo.allocatedWardName || 'General Ward'}</strong>
+              </div>
+
+              <button
+                className="btn btn-primary w-full"
+                onClick={() => {
+                  window.open('/dashboard/management/beds', '_blank');
+                }}
+              >
+                🔗 Open Management Portal Bed Grid
+              </button>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setSelectedAllocatedInfo(null)}>Close</button>
+            </div>
           </div>
         </div>
       )}

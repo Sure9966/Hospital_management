@@ -35,6 +35,11 @@ export class BedsController {
     return this.bedsService.updateBedStatus(id, body.status);
   }
 
+  @Delete('purge-all')
+  purgeAllBeds() {
+    return this.bedsService.purgeAllBeds();
+  }
+
   @Delete(':id')
   deleteBed(@Param('id') id: string) {
     return this.bedsService.deleteBed(id);

@@ -10,6 +10,8 @@ import {
   getBrowserNotificationPermission,
 } from '@/lib/browserNotifications';
 
+import { playNotificationSound } from '@/lib/sound';
+
 let socket: Socket | null = null;
 
 // Storage key for cross-tab unread count synchronization
@@ -277,6 +279,14 @@ export function useSocket() {
       if (notification.id) {
         processedIds.current.add(notification.id);
         saveProcessedNotificationIds(processedIds.current);
+      }
+
+      // Play pleasant notification sound chime
+      playNotificationSound();
+
+      // Dispatch global window event to trigger cross-tab / cross-role UI data auto-refresh
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('hospital-data-refresh', { detail: notification }));
       }
 
       // Prevent duplicate notification in state

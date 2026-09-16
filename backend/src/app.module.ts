@@ -51,10 +51,21 @@ import { LabModule } from './lab/lab.module';
 
         const sslConfig = useSsl
           ? {
-            rejectUnauthorized:
-              configService.get<string>('DB_SSL_REJECT_UNAUTHORIZED') === 'true',
-          }
+              rejectUnauthorized:
+                configService.get<string>('DB_SSL_REJECT_UNAUTHORIZED') === 'true',
+            }
           : false;
+
+        const extraPoolConfig = {
+          max: 20,
+          min: 2,
+          idleTimeoutMillis: 60000,
+          connectionTimeoutMillis: 60000,
+          keepAlive: true,
+          keepAliveInitialDelayMillis: 5000,
+          statement_timeout: 60000,
+          query_timeout: 60000,
+        };
 
         if (databaseUrl) {
           return {
@@ -64,13 +75,9 @@ import { LabModule } from './lab/lab.module';
             synchronize: true,
             logging: false,
             ssl: sslConfig,
-            extra: {
-              max: 20,
-              min: 0,
-              idleTimeoutMillis: 30000,
-              connectionTimeoutMillis: 30000,
-              keepAlive: true,
-            },
+            retryAttempts: 10,
+            retryDelay: 3000,
+            extra: extraPoolConfig,
           };
         }
 
@@ -85,13 +92,9 @@ import { LabModule } from './lab/lab.module';
           synchronize: true,
           logging: false,
           ssl: sslConfig,
-          extra: {
-            max: 20,
-            min: 0,
-            idleTimeoutMillis: 30000,
-            connectionTimeoutMillis: 30000,
-            keepAlive: true,
-          },
+          retryAttempts: 10,
+          retryDelay: 3000,
+          extra: extraPoolConfig,
         };
       },
     }),

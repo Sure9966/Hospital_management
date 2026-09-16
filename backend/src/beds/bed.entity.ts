@@ -56,6 +56,15 @@ export class Bed {
   @Column()
   roomNumber: string; // e.g., 'Room 101', 'Room 204'
 
+  @Column({ nullable: true })
+  bedType: string; // 'ICU', 'General Ward', 'VIP', 'Normal'
+
+  @Column({ nullable: true })
+  subType: string; // 'General Ward A', 'General Ward B', 'Executive Suite', etc.
+
+  @Column({ nullable: true })
+  treatmentFeatures: string; // e.g., 'Ventilator, Oxygen, AC'
+
   @Column({ type: 'enum', enum: BedStatus, default: BedStatus.VACANT })
   status: BedStatus;
 
@@ -91,6 +100,7 @@ export enum AdmissionStatus {
 @Entity('admissions')
 @Index('IDX_ADMISSIONS_STATUS', ['status'])
 @Index('IDX_ADMISSIONS_CREATED', ['createdAt'])
+@Index('IDX_ADMISSIONS_PATIENT', ['patientId'])
 export class Admission {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -117,7 +127,13 @@ export class Admission {
   allocatedBedNumber: string;
 
   @Column({ nullable: true })
+  allocatedRoomNumber: string;
+
+  @Column({ nullable: true })
   allocatedWardName: string;
+
+  @Column({ nullable: true })
+  allocatedBedType: string;
 
   @Column({ type: 'enum', enum: AdmissionStatus, default: AdmissionStatus.PENDING })
   status: AdmissionStatus;

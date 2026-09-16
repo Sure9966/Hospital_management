@@ -24,6 +24,9 @@ interface Bed {
   id: string;
   bedNumber: string;
   roomNumber: string;
+  bedType?: string; // 'ICU', 'General Ward', 'VIP', 'Normal'
+  subType?: string; // 'General Ward A', 'General Ward B', etc.
+  treatmentFeatures?: string;
   status: BedStatus;
   wardId: string;
   ward?: Ward;
@@ -56,6 +59,7 @@ export default function BedManagementView({
 
   // Filters
   const [selectedWard, setSelectedWard] = useState<string>('all');
+  const [selectedBedTypeFilter, setSelectedBedTypeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
 
@@ -69,11 +73,16 @@ export default function BedManagementView({
   // Discharge confirmation state
   const [confirmDischargeBedId, setConfirmDischargeBedId] = useState<string | null>(null);
 
-  // New Bed Form
+  // New Bed Form State
   const [bedForm, setBedForm] = useState({
-    bedNumber: '',
-    roomNumber: '',
+    bedType: 'ICU', // 'ICU' | 'General Ward' | 'VIP' | 'Normal'
+    generalWardType: 'General Ward A', // 'General Ward A' | 'General Ward B'
+    vipType: 'Executive Suite', // 'Executive Suite' | 'VIP Deluxe'
+    normalType: 'Standard Single', // 'Standard Single' | 'Standard Twin Sharing'
+    roomNumber: 'Room 101',
+    bedNumber: 'BED-ICU-101',
     wardId: '',
+    treatmentFeatures: 'Oxygen Line, Cardiac Monitor',
   });
 
   // New Ward Form
@@ -103,19 +112,44 @@ export default function BedManagementView({
         api.get('/beds'),
         api.get('/beds/admissions'),
       ]);
-      setWards(wardsRes.data);
-      setBeds(bedsRes.data);
-      setAdmissions(admRes.data);
-    } catch (err) {
+      setWards(wardsRes.data || []);
+      setBeds(bedsRes.data || []);
+      setAdmissions(admRes.data || []);
+      
+      if ((wardsRes.data || []).length > 0 && !bedForm.wardId) {
+        setBedForm(prev => ({ ...prev, wardId: wardsRes.data[0].id }));
+      }
+    } catch {
       toast.error('Failed to load hospital bed allocation data');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [bedForm.wardId]);
 
   useEffect(() => {
     fetchData();
+    const handleEvent = () => fetchData();
+    window.addEventListener('hospital-data-refresh', handleEvent);
+    window.addEventListener('focus', handleEvent);
+    return () => {
+      window.removeEventListener('hospital-data-refresh', handleEvent);
+      window.removeEventListener('focus', handleEvent);
+    };
   }, [fetchData]);
+
+  // Auto-generate suggested bed number code when Bed Type, Sub-type, or Room Number changes
+  const updateBedCodeSuggestion = (type: string, genWard: string, room: string) => {
+    const roomClean = room.replace(/[^0-9]/g, '') || '101';
+    let prefix = 'BED-ICU';
+    if (type === 'General Ward') {
+      prefix = genWard === 'General Ward B' ? 'BED-GWB' : 'BED-GWA';
+    } else if (type === 'VIP') {
+      prefix = 'BED-VIP';
+    } else if (type === 'Normal') {
+      prefix = 'BED-NRM';
+    }
+    return `${prefix}-${roomClean}`;
+  };
 
   // Handlers
   const handleStatusChange = async (bedId: string, newStatus: BedStatus) => {
@@ -139,18 +173,79 @@ export default function BedManagementView({
     }
   };
 
+  const handleDeleteBed = async (id: string, bedNumber: string) => {
+    if (!confirm(`Are you sure you want to delete bed ${bedNumber}?`)) return;
+    try {
+      await api.delete(`/beds/${id}`);
+      toast.success(`Bed ${bedNumber} deleted`);
+      fetchData();
+    } catch {
+      toast.error('Failed to delete bed');
+    }
+  };
+
+  const handlePurgeAllBeds = async () => {
+    if (!confirm('Are you sure you want to clear all existing beds? This will clear all default beds so you can add fresh beds using the + Add Bed button.')) return;
+    try {
+      await api.delete('/beds/purge-all');
+      toast.success('All default beds cleared! Click + Add Bed to create your beds.');
+      fetchData();
+    } catch {
+      toast.error('Failed to clear beds');
+    }
+  };
+
   const handleCreateBed = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!bedForm.bedNumber || !bedForm.roomNumber || !bedForm.wardId) {
-      toast.error('Please fill in all bed details');
+    if (!bedForm.bedNumber || !bedForm.roomNumber) {
+      toast.error('Please enter room number and bed code');
       return;
     }
+
     setActionLoading(true);
+
+    // Resolve subType label
+    let subType = bedForm.bedType;
+    if (bedForm.bedType === 'General Ward') {
+      subType = bedForm.generalWardType;
+    } else if (bedForm.bedType === 'VIP') {
+      subType = bedForm.vipType;
+    } else if (bedForm.bedType === 'Normal') {
+      subType = bedForm.normalType;
+    }
+
+    // Auto-match ward if wardId is not selected
+    let targetWardId = bedForm.wardId;
+    if (!targetWardId && wards.length > 0) {
+      const matched = wards.find(w => w.name.toLowerCase().includes(bedForm.bedType.toLowerCase())) || wards[0];
+      targetWardId = matched.id;
+    }
+
     try {
-      await api.post('/beds', bedForm);
-      toast.success(`Bed ${bedForm.bedNumber} added successfully`);
+      await api.post('/beds', {
+        bedNumber: bedForm.bedNumber,
+        roomNumber: bedForm.roomNumber,
+        bedType: bedForm.bedType,
+        subType: subType,
+        treatmentFeatures: bedForm.treatmentFeatures,
+        wardId: targetWardId,
+        status: BedStatus.VACANT,
+      });
+
+      toast.success(`✅ Bed ${bedForm.bedNumber} (${subType} - ${bedForm.roomNumber}) created successfully!`);
       setShowAddBedModal(false);
-      setBedForm({ bedNumber: '', roomNumber: '', wardId: '' });
+      
+      // Reset form
+      setBedForm({
+        bedType: 'ICU',
+        generalWardType: 'General Ward A',
+        vipType: 'Executive Suite',
+        normalType: 'Standard Single',
+        roomNumber: 'Room 102',
+        bedNumber: 'BED-ICU-102',
+        wardId: wards.length > 0 ? wards[0].id : '',
+        treatmentFeatures: 'Oxygen Line, Cardiac Monitor',
+      });
       fetchData();
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Failed to create bed');
@@ -226,12 +321,20 @@ export default function BedManagementView({
   const filteredBeds = beds.filter((b) => {
     const matchesWard = selectedWard === 'all' || b.wardId === selectedWard;
     const matchesStatus = statusFilter === 'all' || b.status === statusFilter;
+    const matchesType =
+      selectedBedTypeFilter === 'all' ||
+      b.bedType?.toLowerCase() === selectedBedTypeFilter.toLowerCase() ||
+      b.subType?.toLowerCase().includes(selectedBedTypeFilter.toLowerCase());
+
     const q = search.toLowerCase();
     const matchesSearch =
       b.bedNumber.toLowerCase().includes(q) ||
       b.roomNumber.toLowerCase().includes(q) ||
+      (b.bedType && b.bedType.toLowerCase().includes(q)) ||
+      (b.subType && b.subType.toLowerCase().includes(q)) ||
       (b.currentPatientName && b.currentPatientName.toLowerCase().includes(q));
-    return matchesWard && matchesStatus && matchesSearch;
+
+    return matchesWard && matchesStatus && matchesType && matchesSearch;
   });
 
   // Metrics
@@ -256,6 +359,23 @@ export default function BedManagementView({
     }
   };
 
+  const renderBedTypeBadge = (b: Bed) => {
+    const typeStr = b.subType || b.bedType || 'Normal';
+    if (typeStr.includes('ICU')) {
+      return <span className="badge badge-purple" style={{ background: 'linear-gradient(135deg, #8b5cf6, #ec4899)', color: '#fff' }}>⚡ ICU</span>;
+    }
+    if (typeStr.includes('General Ward A')) {
+      return <span className="badge badge-info" style={{ background: 'linear-gradient(135deg, #0ea5e9, #38bdf8)', color: '#fff' }}>🏢 General Ward A</span>;
+    }
+    if (typeStr.includes('General Ward B')) {
+      return <span className="badge badge-info" style={{ background: 'linear-gradient(135deg, #0284c7, #0ea5e9)', color: '#fff' }}>🏢 General Ward B</span>;
+    }
+    if (typeStr.includes('VIP')) {
+      return <span className="badge badge-warning" style={{ background: 'linear-gradient(135deg, #f59e0b, #fbbf24)', color: '#000', fontWeight: 800 }}>👑 {typeStr}</span>;
+    }
+    return <span className="badge badge-secondary" style={{ background: 'rgba(16,185,129,0.15)', color: '#10b981', border: '1px solid #10b981' }}>🛌 {typeStr}</span>;
+  };
+
   if (loading) {
     return <CenteredLoader message="Loading Hospital Bed Grid..." subtext="Syncing real-time ward capacity & room status" />;
   }
@@ -265,19 +385,29 @@ export default function BedManagementView({
       {/* Page Header */}
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h2>🏥 Hospital Bed & Ward Management System</h2>
-          <p>Real-time occupancy tracking, bed allocations, room status, and admission queue management.</p>
+          <h2>🏥 Hospital Bed & Ward Management Portal</h2>
+          <p>Real-time room occupancy grid, bed types (ICU, General Ward A/B, VIP, Normal), and patient bed allocations.</p>
         </div>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <button className="btn btn-primary" onClick={() => setShowAdmissionModal(true)}>
-            📥 New Admission Request
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          {/* Main + Icon Button to Add Bed */}
+          <button
+            className="btn btn-primary"
+            onClick={() => setShowAddBedModal(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', fontWeight: 700, borderRadius: 10 }}
+          >
+            <span style={{ fontSize: 18, lineHeight: 1 }}>➕</span> Add Bed
           </button>
-          <button className="btn btn-secondary btn-sm" onClick={() => setShowAddBedModal(true)}>
-            🛏️ Add Bed
+          <button className="btn btn-secondary btn-sm" onClick={() => setShowAdmissionModal(true)}>
+            📥 Request Admission
           </button>
           <button className="btn btn-secondary btn-sm" onClick={() => setShowAddWardModal(true)}>
             🏢 Add Ward
           </button>
+          {beds.length > 0 && (
+            <button className="btn btn-danger btn-sm" style={{ opacity: 0.8 }} onClick={handlePurgeAllBeds} title="Clear default beds">
+              🗑️ Clear Default Beds
+            </button>
+          )}
         </div>
       </div>
 
@@ -287,7 +417,7 @@ export default function BedManagementView({
           <div className="stat-icon" style={{ background: 'rgba(99,102,241,0.15)', color: 'var(--primary-light)' }}>🛏️</div>
           <div className="stat-value">{totalBeds}</div>
           <div className="stat-label">Total Hospital Beds</div>
-          <div className="stat-change" style={{ color: 'var(--text-muted)' }}>Across {wards.length} Wards</div>
+          <div className="stat-change" style={{ color: 'var(--text-muted)' }}>Created in Management</div>
         </div>
 
         <div className="stat-card" style={{ '--gradient': 'linear-gradient(135deg, #10b981, #14b8a6)' } as any}>
@@ -309,14 +439,14 @@ export default function BedManagementView({
         <div className="stat-card" style={{ '--gradient': 'linear-gradient(135deg, #f59e0b, #fbbf24)' } as any}>
           <div className="stat-icon" style={{ background: 'rgba(245,158,11,0.15)', color: '#fbbf24' }}>🧹</div>
           <div className="stat-value">{cleaningBeds}</div>
-          <div className="stat-label">Beds in Cleaning/Sanitizing</div>
+          <div className="stat-label">Sanitizing / Cleaning</div>
           <div className="stat-change" style={{ color: '#fbbf24' }}>Sanitation in progress</div>
         </div>
 
         <div className="stat-card" style={{ '--gradient': 'linear-gradient(135deg, #8b5cf6, #ec4899)' } as any}>
           <div className="stat-icon" style={{ background: 'rgba(139,92,246,0.15)', color: '#c084fc' }}>⏳</div>
           <div className="stat-value">{pendingAdmissions.length}</div>
-          <div className="stat-label">Pending Admissions</div>
+          <div className="stat-label">Pending Doctor Requests</div>
           <div className="stat-change" style={{ color: pendingAdmissions.length > 0 ? '#f87171' : '#34d399' }}>
             {pendingAdmissions.length > 0 ? 'Awaiting Allocation' : 'Queue Empty'}
           </div>
@@ -328,7 +458,7 @@ export default function BedManagementView({
         <div className="card mb-4" style={{ border: '1px solid rgba(245,158,11,0.4)', background: 'rgba(245,158,11,0.03)' }}>
           <div className="card-header" style={{ background: 'rgba(245,158,11,0.08)' }}>
             <h3 className="card-title" style={{ color: '#fbbf24', display: 'flex', alignItems: 'center', gap: 8 }}>
-              ⚠️ Pending Admission Requests Queue ({pendingAdmissions.length})
+              ⚠️ Doctor Bed Allocation Requests Queue ({pendingAdmissions.length})
             </h3>
           </div>
           <div className="card-body p-0">
@@ -340,7 +470,7 @@ export default function BedManagementView({
                     <th>Patient ID</th>
                     <th>Doctor</th>
                     <th>Diagnosis</th>
-                    <th>Requested Ward</th>
+                    <th>Requested Ward / Type</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -374,23 +504,25 @@ export default function BedManagementView({
       )}
 
       {/* Search & Filter Bar */}
-      <div className="action-bar mb-4">
-        <div className="search-bar" style={{ flex: 1, maxWidth: 380 }}>
+      <div className="action-bar mb-4" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div className="search-bar" style={{ flex: 1, minWidth: 260 }}>
           <span>🔍</span>
           <input
             type="text"
-            placeholder="Search bed, room number or patient name..."
+            placeholder="Search room number, bed code, or patient name..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
 
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <select className="form-control" style={{ width: 170 }} value={selectedWard} onChange={(e) => setSelectedWard(e.target.value)}>
-            <option value="all">All Wards ({wards.length})</option>
-            {wards.map((w) => (
-              <option key={w.id} value={w.id}>{w.name}</option>
-            ))}
+          <select className="form-control" style={{ width: 170 }} value={selectedBedTypeFilter} onChange={(e) => setSelectedBedTypeFilter(e.target.value)}>
+            <option value="all">All Bed Types</option>
+            <option value="icu">⚡ ICU</option>
+            <option value="general ward a">🏢 General Ward A</option>
+            <option value="general ward b">🏢 General Ward B</option>
+            <option value="vip">👑 VIP</option>
+            <option value="normal">🛌 Normal</option>
           </select>
 
           <select className="form-control" style={{ width: 160 }} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
@@ -403,91 +535,242 @@ export default function BedManagementView({
         </div>
       </div>
 
-      {/* Hospital Bed Grid Visualizer */}
+      {/* Hospital Bed Grid Visualizer (Cards) */}
       <div className="card mb-4">
-        <div className="card-header">
-          <h3 className="card-title">🛏️ Hospital Bed Status Grid ({filteredBeds.length})</h3>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Real-time visual floor grid</span>
+        <div className="card-header flex justify-between items-center">
+          <div>
+            <h3 className="card-title">🛏️ Management Bed Grid ({filteredBeds.length})</h3>
+            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Displays room number, bed type, status & allocation</span>
+          </div>
+          <button className="btn btn-primary btn-sm" onClick={() => setShowAddBedModal(true)}>
+            ➕ Add Bed Card
+          </button>
         </div>
         <div className="card-body">
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
-            {filteredBeds.map((bed) => {
-              const isOccupied = bed.status === BedStatus.OCCUPIED;
-              const isVacant = bed.status === BedStatus.VACANT;
-              const isCleaning = bed.status === BedStatus.CLEANING;
+          {filteredBeds.length === 0 ? (
+            <div className="empty-state" style={{ padding: 40, textAlign: 'center' }}>
+              <div className="empty-icon" style={{ fontSize: 42, marginBottom: 12 }}>🛏️</div>
+              <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>No beds created yet</h3>
+              <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 16 }}>
+                Click the <strong>➕ Add Bed</strong> button to create beds with ICU, General Ward A/B, VIP, or Normal bed types and room numbers.
+              </p>
+              <button className="btn btn-primary" onClick={() => setShowAddBedModal(true)}>
+                ➕ Create First Bed Card
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
+              {filteredBeds.map((bed) => {
+                const isOccupied = bed.status === BedStatus.OCCUPIED;
+                const isVacant = bed.status === BedStatus.VACANT;
+                const isCleaning = bed.status === BedStatus.CLEANING;
 
-              return (
-                <div
-                  key={bed.id}
-                  style={{
-                    padding: 16,
-                    borderRadius: 14,
-                    background: isOccupied
-                      ? 'rgba(239,68,68,0.06)'
-                      : isVacant
-                        ? 'rgba(16,185,129,0.06)'
-                        : isCleaning
-                          ? 'rgba(245,158,11,0.06)'
-                          : 'var(--bg-surface)',
-                    border: `1.5px solid ${isOccupied
-                      ? '#ef4444'
-                      : isVacant
-                        ? '#10b981'
-                        : isCleaning
-                          ? '#f59e0b'
-                          : 'var(--border)'
-                      }`,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                  }}
-                >
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                      <span style={{ fontSize: 14, fontWeight: 800 }}>{bed.bedNumber}</span>
-                      {getStatusBadge(bed.status)}
-                    </div>
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
-                      🏢 {bed.ward?.name || 'General Ward'} • {bed.roomNumber}
-                    </div>
-
-                    {isOccupied ? (
-                      <div style={{ background: 'var(--bg-surface)', padding: 10, borderRadius: 8, border: '1px solid var(--border)', marginBottom: 12 }}>
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>ADMITTED PATIENT</div>
-                        <div style={{ fontSize: 13, fontWeight: 700 }}>{bed.currentPatientName}</div>
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>ID: <code>{bed.currentPatientId}</code></div>
+                return (
+                  <div
+                    key={bed.id}
+                    style={{
+                      padding: 16,
+                      borderRadius: 14,
+                      background: isOccupied
+                        ? 'rgba(239,68,68,0.05)'
+                        : isVacant
+                          ? 'rgba(16,185,129,0.05)'
+                          : isCleaning
+                            ? 'rgba(245,158,11,0.05)'
+                            : 'var(--bg-surface)',
+                      border: `1.5px solid ${isOccupied
+                        ? '#ef4444'
+                        : isVacant
+                          ? '#10b981'
+                          : isCleaning
+                            ? '#f59e0b'
+                            : 'var(--border)'
+                        }`,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.03)',
+                      transition: 'transform 0.15s ease',
+                    }}
+                  >
+                    <div>
+                      {/* Bed Card Header: General Ward shows Bed Number, VIP/Normal/ICU shows Room Number */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--primary-light)' }}>
+                          {bed.bedType === 'General Ward' || bed.subType?.includes('General Ward')
+                            ? `🛏️ Bed: ${bed.bedNumber}`
+                            : `🚪 Room: ${bed.roomNumber}`}
+                        </span>
+                        <button
+                          onClick={() => handleDeleteBed(bed.id, bed.bedNumber)}
+                          style={{ background: 'transparent', border: 'none', cursor: 'pointer', opacity: 0.6, fontSize: 13 }}
+                          title="Delete Bed"
+                        >
+                          🗑️
+                        </button>
                       </div>
-                    ) : (
-                      <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '12px 0' }}>
-                        {isVacant ? 'Ready for patient assignment' : isCleaning ? 'Cleaning staff notified' : 'Under maintenance'}
-                      </div>
-                    )}
-                  </div>
 
-                  {/* Actions */}
-                  <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                    {isOccupied && (
-                      <button className="btn btn-danger btn-sm w-full" onClick={() => setConfirmDischargeBedId(bed.id)}>
-                        🚪 Discharge Patient
-                      </button>
-                    )}
-                    {isCleaning && (
-                      <button className="btn btn-success btn-sm w-full" onClick={() => handleStatusChange(bed.id, BedStatus.VACANT)}>
-                        ✓ Mark Cleaned & Vacant
-                      </button>
-                    )}
-                    {isVacant && (
-                      <button className="btn btn-secondary btn-sm w-full" onClick={() => handleStatusChange(bed.id, BedStatus.CLEANING)}>
-                        🧹 Mark for Cleaning
-                      </button>
-                    )}
+                      {/* Room Number & Bed Type */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          🚪 Room: <span style={{ color: '#0ea5e9' }}>{bed.roomNumber}</span>
+                        </div>
+                        <div>
+                          {renderBedTypeBadge(bed)}
+                        </div>
+                      </div>
+
+                      {/* Treatment features */}
+                      {bed.treatmentFeatures && (
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 10, background: 'var(--bg-surface)', padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)' }}>
+                          ✨ {bed.treatmentFeatures}
+                        </div>
+                      )}
+
+                      {/* Occupied Patient Info */}
+                      {isOccupied ? (
+                        <div style={{ background: 'var(--bg-surface)', padding: 10, borderRadius: 8, border: '1px solid var(--border)', marginBottom: 12 }}>
+                          <div style={{ fontSize: 10, color: '#ef4444', fontWeight: 800 }}>ADMITTED PATIENT</div>
+                          <div style={{ fontSize: 13, fontWeight: 700 }}>{bed.currentPatientName}</div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>ID: <code>{bed.currentPatientId}</code></div>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 0', minHeight: 44 }}>
+                          {isVacant ? '🟢 Ready for allocation to Doctor request' : isCleaning ? '🧹 Cleaning & sanitization in progress' : '🛠️ Under Maintenance'}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Actions */}
+                    <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                      {isOccupied && (
+                        <button className="btn btn-danger btn-sm w-full" onClick={() => setConfirmDischargeBedId(bed.id)}>
+                          🚪 Discharge Patient
+                        </button>
+                      )}
+                      {isCleaning && (
+                        <button className="btn btn-success btn-sm w-full" onClick={() => handleStatusChange(bed.id, BedStatus.VACANT)}>
+                          ✓ Mark Cleaned & Vacant
+                        </button>
+                      )}
+                      {isVacant && (
+                        <button className="btn btn-secondary btn-sm w-full" onClick={() => handleStatusChange(bed.id, BedStatus.CLEANING)}>
+                          🧹 Mark for Cleaning
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Modal: Add New Bed (Triggered by + Icon Button) */}
+      {showAddBedModal && (
+        <div className="modal-overlay">
+          <div className="modal" style={{ maxWidth: 440 }}>
+            <div className="modal-header" style={{ borderBottom: '1px solid var(--border)', paddingBottom: 12 }}>
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                ➕ Add New Bed Card
+              </h3>
+              <button className="btn btn-secondary btn-sm btn-icon" onClick={() => setShowAddBedModal(false)}>✕</button>
+            </div>
+            <form onSubmit={handleCreateBed}>
+              <div className="modal-body form-grid">
+                {/* Bed Type Selection */}
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 700 }}>1. Select Bed Type *</label>
+                  <select
+                    className="form-control"
+                    value={bedForm.bedType}
+                    onChange={(e) => {
+                      const newType = e.target.value;
+                      setBedForm(prev => ({
+                        ...prev,
+                        bedType: newType,
+                      }));
+                    }}
+                    required
+                  >
+                    <option value="ICU">⚡ ICU (Intensive Care Unit)</option>
+                    <option value="General Ward">🏢 General Ward</option>
+                  </select>
+                </div>
+
+                {/* Conditional Sub-type when General Ward is selected */}
+                {bedForm.bedType === 'General Ward' && (
+                  <div className="form-group" style={{ background: 'rgba(14,165,233,0.08)', padding: 12, borderRadius: 8, border: '1px solid rgba(14,165,233,0.3)' }}>
+                    <label className="form-label" style={{ fontWeight: 700, color: '#0ea5e9' }}>
+                      General Ward Selection *
+                    </label>
+                    <select
+                      className="form-control"
+                      value={bedForm.generalWardType}
+                      onChange={(e) => {
+                        const newGenWard = e.target.value;
+                        setBedForm(prev => ({
+                          ...prev,
+                          generalWardType: newGenWard,
+                        }));
+                      }}
+                      required
+                    >
+                      <option value="General Ward A">🏢 General Ward A</option>
+                      <option value="General Ward B">🏢 General Ward B</option>
+                    </select>
+                  </div>
+                )}
+
+                {/* Room Number Input */}
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 700 }}>2. Room Number *</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="e.g. 101, 102, 204"
+                    value={bedForm.roomNumber}
+                    onChange={(e) => setBedForm({ ...bedForm, roomNumber: e.target.value })}
+                    required
+                  />
+                </div>
+
+                {/* Bed Number Input (Just numbers / simple identifier) */}
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 700 }}>3. Bed Number *</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="e.g. 101, 102, Bed 1, Bed 2"
+                    value={bedForm.bedNumber}
+                    onChange={(e) => setBedForm({ ...bedForm, bedNumber: e.target.value })}
+                    required
+                  />
+                </div>
+
+                {/* Features & Treatment Options */}
+                <div className="form-group">
+                  <label className="form-label">Treatment Features & Equipment (Optional)</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="e.g. Oxygen Line, Cardiac Monitor"
+                    value={bedForm.treatmentFeatures}
+                    onChange={(e) => setBedForm({ ...bedForm, treatmentFeatures: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="modal-footer" style={{ marginTop: 12 }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setShowAddBedModal(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={actionLoading}>
+                  {actionLoading ? 'Creating Bed...' : '✓ Create Bed Card'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Modal: New Admission Request */}
       {showAdmissionModal && (
@@ -533,53 +816,27 @@ export default function BedManagementView({
                     />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Requested Ward</label>
+                    <label className="form-label">Requested Ward / Type</label>
                     <select
                       className="form-control"
                       value={admissionForm.requestedWard}
                       onChange={(e) => setAdmissionForm({ ...admissionForm, requestedWard: e.target.value })}
                     >
-                      <option value="">-- Select Ward --</option>
-                      {wards.map((w) => (
-                        <option key={w.id} value={w.name}>{w.name}</option>
-                      ))}
+                      <option value="">-- Select Ward / Type --</option>
+                      <option value="ICU">⚡ ICU</option>
+                      <option value="General Ward A">🏢 General Ward A</option>
+                      <option value="General Ward B">🏢 General Ward B</option>
+                      <option value="VIP">👑 VIP</option>
+                      <option value="Normal">🛌 Normal</option>
                     </select>
                   </div>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Ready Bed Number (Optional)</label>
-                  <select
-                    className="form-control"
-                    value={targetBedId}
-                    onChange={(e) => {
-                      setTargetBedId(e.target.value);
-                      const selectedBed = beds.find(b => b.id === e.target.value);
-                      if (selectedBed) {
-                        setAdmissionForm(prev => ({
-                          ...prev,
-                          requestedWard: selectedBed.ward?.name || prev.requestedWard,
-                          notes: prev.notes ? `${prev.notes} [Preferred Bed: ${selectedBed.bedNumber}]` : `[Preferred Bed: ${selectedBed.bedNumber}]`
-                        }));
-                      }
-                    }}
-                  >
-                    <option value="">-- Select Ready Bed (Vacant) --</option>
-                    {beds.filter((b) => b.status === BedStatus.VACANT).map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.bedNumber} ({b.ward?.name || 'Ward'} - {b.roomNumber}) — READY
-                      </option>
-                    ))}
-                  </select>
-                  <span style={{ fontSize: 11, color: '#10b981', marginTop: 4, display: 'block' }}>
-                    🟢 Reflecting {beds.filter((b) => b.status === BedStatus.VACANT).length} real-time ready beds available for direct allocation.
-                  </span>
                 </div>
                 <div className="form-group">
                   <label className="form-label">Primary Diagnosis</label>
                   <input
                     type="text"
                     className="form-control"
-                    placeholder="e.g. Cardiac Arrythmia"
+                    placeholder="e.g. Post-operative observation"
                     value={admissionForm.diagnosis}
                     onChange={(e) => setAdmissionForm({ ...admissionForm, diagnosis: e.target.value })}
                   />
@@ -616,19 +873,19 @@ export default function BedManagementView({
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Select Vacant Bed</label>
+                  <label className="form-label">Select Vacant Bed Card</label>
                   <select
                     className="form-control"
                     value={targetBedId}
                     onChange={(e) => setTargetBedId(e.target.value)}
                     required
                   >
-                    <option value="">-- Choose Vacant Bed --</option>
+                    <option value="">-- Choose Vacant Bed Card --</option>
                     {beds
                       .filter((b) => b.status === BedStatus.VACANT)
                       .map((b) => (
                         <option key={b.id} value={b.id}>
-                          {b.bedNumber} ({b.ward?.name} — {b.roomNumber})
+                          {b.bedNumber} ({b.subType || b.bedType || 'Ward'} — {b.roomNumber})
                         </option>
                       ))}
                   </select>
@@ -638,64 +895,6 @@ export default function BedManagementView({
                 <button type="button" className="btn btn-secondary" onClick={() => setShowAllocateModal(null)}>Cancel</button>
                 <button type="submit" className="btn btn-success" disabled={actionLoading}>
                   {actionLoading ? 'Allocating...' : '✓ Confirm Bed Allocation'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Modal: Add New Bed */}
-      {showAddBedModal && (
-        <div className="modal-overlay">
-          <div className="modal" style={{ maxWidth: 420 }}>
-            <div className="modal-header">
-              <h3>🛏️ Add New Bed</h3>
-              <button className="btn btn-secondary btn-sm btn-icon" onClick={() => setShowAddBedModal(false)}>✕</button>
-            </div>
-            <form onSubmit={handleCreateBed}>
-              <div className="modal-body form-grid">
-                <div className="form-group">
-                  <label className="form-label">Bed Number / Code *</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="e.g. BED-ICU-105"
-                    value={bedForm.bedNumber}
-                    onChange={(e) => setBedForm({ ...bedForm, bedNumber: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Room Number *</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="e.g. Room 102"
-                    value={bedForm.roomNumber}
-                    onChange={(e) => setBedForm({ ...bedForm, roomNumber: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Assign Ward *</label>
-                  <select
-                    className="form-control"
-                    value={bedForm.wardId}
-                    onChange={(e) => setBedForm({ ...bedForm, wardId: e.target.value })}
-                    required
-                  >
-                    <option value="">-- Select Ward --</option>
-                    {wards.map((w) => (
-                      <option key={w.id} value={w.id}>{w.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowAddBedModal(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary" disabled={actionLoading}>
-                  {actionLoading ? 'Saving...' : 'Add Bed'}
                 </button>
               </div>
             </form>
@@ -718,18 +917,18 @@ export default function BedManagementView({
                   <input
                     type="text"
                     className="form-control"
-                    placeholder="e.g. Pediatric Care Unit"
+                    placeholder="e.g. General Ward A"
                     value={wardForm.name}
                     onChange={(e) => setWardForm({ ...wardForm, name: e.target.value })}
                     required
                   />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Floor / Building Location *</label>
+                  <label className="form-label">Floor / Location *</label>
                   <input
                     type="text"
                     className="form-control"
-                    placeholder="e.g. 3rd Floor Wing B"
+                    placeholder="e.g. 1st Floor Wing A"
                     value={wardForm.floor}
                     onChange={(e) => setWardForm({ ...wardForm, floor: e.target.value })}
                     required
@@ -739,7 +938,7 @@ export default function BedManagementView({
                   <label className="form-label">Description</label>
                   <textarea
                     className="form-control"
-                    placeholder="Ward purpose and capacity notes"
+                    placeholder="Ward details"
                     value={wardForm.description}
                     onChange={(e) => setWardForm({ ...wardForm, description: e.target.value })}
                   />

@@ -25,74 +25,24 @@ export class BedsService implements OnModuleInit {
 
   async seedDefaultBedsAndWards() {
     const wardCount = await this.wardRepo.count();
-    if (wardCount > 0) return;
-
-    const defaultWards = [
-      { name: 'ICU (Intensive Care)', floor: '2nd Floor - Wing A', description: 'Critical care unit with 24/7 monitoring' },
-      { name: 'General Male Ward', floor: '1st Floor - Wing B', description: 'General medical and surgical inpatient care' },
-      { name: 'General Female Ward', floor: '1st Floor - Wing C', description: 'General medical and surgical inpatient care' },
-      { name: 'Pediatric Care', floor: '3rd Floor', description: 'Child and infant inpatient ward' },
-      { name: 'Emergency Triage', floor: 'Ground Floor', description: 'Short stay observation and acute triage' },
-    ];
-
-    for (const wData of defaultWards) {
-      const ward = await this.wardRepo.save(this.wardRepo.create(wData));
-
-      // Seed 4-6 beds per ward
-      for (let i = 1; i <= 5; i++) {
-        const bedNum = `BED-${ward.name.substring(0, 3).toUpperCase()}-${100 + i}`;
-        const roomNum = `Room ${100 + Math.ceil(i / 2)}`;
-
-        let status = BedStatus.VACANT;
-        let pName: string | null = null;
-        let pId: string | null = null;
-
-        if (i === 1) {
-          status = BedStatus.OCCUPIED;
-          pName = `Patient Demo ${i}`;
-          pId = `NMH26000000${i}`;
-        } else if (i === 2) {
-          status = BedStatus.CLEANING;
-        }
-
-        await this.bedRepo.save(
-          this.bedRepo.create({
-            bedNumber: bedNum,
-            roomNumber: roomNum,
-            status,
-            ward,
-            wardId: ward.id,
-            currentPatientId: pId || undefined,
-            currentPatientName: pName || undefined,
-            admissionDate: pName ? new Date().toISOString() : undefined,
-          }),
-        );
+    if (wardCount === 0) {
+      const defaultWards = [
+        { name: 'ICU (Intensive Care)', floor: '2nd Floor - Wing A', description: 'Critical care unit with 24/7 monitoring' },
+        { name: 'General Ward A', floor: '1st Floor - Wing A', description: 'General inpatient male & female care unit A' },
+        { name: 'General Ward B', floor: '1st Floor - Wing B', description: 'General inpatient male & female care unit B' },
+        { name: 'VIP Suite Ward', floor: '4th Floor - Executive Wing', description: 'VIP private rooms and luxury care' },
+        { name: 'Normal Inpatient Ward', floor: '3rd Floor - Wing C', description: 'Standard single & twin sharing rooms' },
+      ];
+      for (const wData of defaultWards) {
+        await this.wardRepo.save(this.wardRepo.create(wData));
       }
+      console.log('✅ Default Wards Seeded (No default beds pre-populated)');
     }
+  }
 
-    // Seed sample pending admissions
-    await this.admissionRepo.save([
-      this.admissionRepo.create({
-        patientId: 'NMH26000000',
-        patientName: 'Robert Vance',
-        doctorName: 'Dr. Sarah Jenkins',
-        diagnosis: 'Acute Appendicitis',
-        requestedWard: 'General Male Ward',
-        status: AdmissionStatus.PENDING,
-        notes: 'Post-op recovery bed needed',
-      }),
-      this.admissionRepo.create({
-        patientId: 'NMH26000000',
-        patientName: 'Elena Rostova',
-        doctorName: 'Dr. Michael Chang',
-        diagnosis: 'Severe Pneumonia',
-        requestedWard: 'ICU (Intensive Care)',
-        status: AdmissionStatus.PENDING,
-        notes: 'Requires ventilator support bed',
-      }),
-    ]);
-
-    console.log('✅ Default Wards, Beds & Pending Admissions Seeded successfully');
+  async purgeAllBeds() {
+    await this.bedRepo.delete({});
+    return { success: true, message: 'All default beds purged successfully' };
   }
 
   // Wards
@@ -163,9 +113,25 @@ export class BedsService implements OnModuleInit {
     admission.status = AdmissionStatus.ADMITTED;
     admission.allocatedBedId = bed.id;
     admission.allocatedBedNumber = bed.bedNumber;
+    admission.allocatedRoomNumber = bed.roomNumber;
+    admission.allocatedBedType = bed.bedType || bed.subType || 'Normal';
     admission.allocatedWardName = bed.ward ? bed.ward.name : 'General';
     admission.admittedAt = new Date();
     await this.admissionRepo.save(admission);
+
+    // Update Patient Entity record if present
+    if (admission.patientId) {
+      let patient = await this.patientRepo.findOne({ where: { patientId: admission.patientId } });
+      if (!patient) {
+        patient = await this.patientRepo.findOne({ where: { id: admission.patientId } });
+      }
+      if (patient) {
+        patient.status = PatientStatus.ADMITTED;
+        patient.bedNumber = bed.bedNumber;
+        patient.ward = `${bed.ward?.name || 'Ward'} (${bed.roomNumber})`;
+        await this.patientRepo.save(patient);
+      }
+    }
 
     return { admission, bed };
   }
