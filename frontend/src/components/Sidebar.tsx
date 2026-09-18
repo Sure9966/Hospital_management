@@ -62,25 +62,37 @@ const roleMenus: Record<string, { icon: string; label: string; href: string }[]>
 };
 
 export default function Sidebar({ role }: { role: string }) {
+  const [mounted, setMounted] = useState(false);
+  const [user, setUser] = useState<ReturnType<typeof getUser>>(null);
   const searchParams = useSearchParams();
-  const currentTab = searchParams.get('tab');
+  const currentTab = mounted ? searchParams.get('tab') : null;
   const pathname = usePathname();
   const router = useRouter();
   const { notifications, unreadCount, markRead, connectionStatus } = useSocket();
   const [notifOpen, setNotifOpen] = useState(false);
-  const user = getUser();
   const menus = roleMenus[role] || [];
+
+  useEffect(() => {
+    setMounted(true);
+    setUser(getUser());
+  }, []);
 
   // Debug logging
   useEffect(() => {
-    console.log('🔔 Sidebar notification state:', {
-      notificationsCount: notifications.length,
-      unreadCount,
-      connectionStatus,
-      role,
-      userId: user?.id
-    });
-  }, [notifications, unreadCount, connectionStatus, role, user?.id]);
+    if (mounted) {
+      console.log('🔔 Sidebar notification state:', {
+        notificationsCount: notifications.length,
+        unreadCount,
+        connectionStatus,
+        role,
+        userId: user?.id
+      });
+    }
+  }, [mounted, notifications, unreadCount, connectionStatus, role, user?.id]);
+
+  if (!mounted) {
+    return null;
+  }
 
   const handleLogout = () => {
     clearAuth();

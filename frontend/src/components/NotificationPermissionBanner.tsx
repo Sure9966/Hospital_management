@@ -3,11 +3,13 @@ import { useState, useEffect } from 'react';
 import { getBrowserNotificationPermission, requestBrowserNotificationPermission, getPermissionHelpText, getPermissionStatusIcon } from '@/lib/browserNotifications';
 
 export function NotificationPermissionBanner() {
+  const [mounted, setMounted] = useState(false);
   const [permission, setPermission] = useState<ReturnType<typeof getBrowserNotificationPermission>>('default');
   const [dismissed, setDismissed] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     setPermission(getBrowserNotificationPermission());
     
     // Check if user has previously dismissed
@@ -38,7 +40,7 @@ export function NotificationPermissionBanner() {
     localStorage.setItem('notification_banner_dismissed', 'true');
   };
 
-  if (dismissed || permission === 'granted' || permission === 'unsupported') {
+  if (!mounted || dismissed || permission === 'granted' || permission === 'unsupported') {
     return null;
   }
 

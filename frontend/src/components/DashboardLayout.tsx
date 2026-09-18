@@ -18,10 +18,13 @@ export default function DashboardLayout({
   title?: string;
 }) {
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setMounted(true);
+
     // Apply saved hospital theme
     applyTheme(getCurrentTheme());
 
@@ -45,6 +48,10 @@ export default function DashboardLayout({
       setLoading(false);
     }
   }, [router, role]);
+
+  if (!mounted) {
+    return null;
+  }
 
   if (loading) {
     return <CenteredLoader message="Loading MediCore Dashboard..." subtext="Verifying security credentials & hospital theme" />;

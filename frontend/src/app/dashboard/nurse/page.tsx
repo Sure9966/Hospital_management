@@ -13,8 +13,11 @@ const emptyForm = {
 };
 
 export default function NurseDashboard() {
+  const [mounted, setMounted] = useState(false);
   const searchParams = useSearchParams();
+
   useEffect(() => {
+    setMounted(true);
     const tab = searchParams.get('tab');
 
     if (
@@ -47,6 +50,41 @@ export default function NurseDashboard() {
   const [completedDoses, setCompletedDoses] = useState<Record<string, boolean>>({});
   const [selectedLabPatient, setSelectedLabPatient] = useState<any>(null);
   const [selectedMedPatient, setSelectedMedPatient] = useState<any>(null);
+
+  const handleStartMedicine = (patientId: string, medicineName: string, daysCount: number) => {
+    setCompletedDoses(prev => {
+      const updated = { ...prev };
+      for (let dayNum = 1; dayNum <= daysCount; dayNum++) {
+        const dayKey = `${patientId}-${medicineName}-day-${dayNum}`;
+        updated[dayKey] = true;
+      }
+      return updated;
+    });
+    playNotificationSound();
+    toast.success(`▶️ Medication started! All ${daysCount} day doses activated for "${medicineName}".`);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('hospital-data-refresh'));
+    }
+  };
+
+  const handleStartAllMedicines = (patientId: string, rxItems: any[]) => {
+    setCompletedDoses(prev => {
+      const updated = { ...prev };
+      rxItems.forEach((m: any) => {
+        const daysCount = Math.max(1, Math.min(14, parseInt(m.duration) || 5));
+        for (let dayNum = 1; dayNum <= daysCount; dayNum++) {
+          const dayKey = `${patientId}-${m.medicineName}-day-${dayNum}`;
+          updated[dayKey] = true;
+        }
+      });
+      return updated;
+    });
+    playNotificationSound();
+    toast.success(`▶️ All prescribed medicines started & active for patient!`);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('hospital-data-refresh'));
+    }
+  };
 
   const load = () => api.get('/nurse/vitals').then(r => setVitals(r.data)).catch(() => []);
   const loadDischarges = () => api.get('/nurse/discharges').then(r => setDischargeSummaries(r.data)).catch(() => []);
@@ -165,6 +203,10 @@ export default function NurseDashboard() {
     (d.diagnosis || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  if (!mounted) {
+    return null;
+  }
+
   return (
     <DashboardLayout role="nurse">
       <div className="topbar">
@@ -255,7 +297,6 @@ export default function NurseDashboard() {
                         <th>Assigned Doctor</th>
                         <th>Bed & Room Number</th>
                         <th>Prescribed Medicines (How & When to take)</th>
-                        <th>Actions & Lab Reports</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -322,16 +363,31 @@ export default function NurseDashboard() {
                             </td>
                             <td style={{ minWidth: 340 }}>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                <button
-                                  className="btn btn-secondary btn-sm"
-                                  style={{ fontSize: 11, fontWeight: 700, padding: '4px 10px', border: '1px dashed #0ea5e9', color: '#0ea5e9' }}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedMedPatient({ adm, rx, rxItems, patientLabs });
-                                  }}
-                                >
-                                  💊 Open Med & EHR Manager ({rxItems.length} Medicines)
-                                </button>
+                                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                  <button
+                                    className="btn btn-secondary btn-sm"
+                                    style={{ fontSize: 11, fontWeight: 700, padding: '4px 10px', border: '1px dashed #0ea5e9', color: '#0ea5e9' }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedMedPatient({ adm, rx, rxItems, patientLabs });
+                                    }}
+                                  >
+                                    💊 Open Med & EHR Manager ({rxItems.length} Medicines)
+                                  </button>
+
+                                  {rxItems.length > 0 && (
+                                    <button
+                                      className="btn btn-success btn-sm"
+                                      style={{ fontSize: 11, fontWeight: 700, padding: '4px 10px', background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none', color: '#fff' }}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleStartAllMedicines(adm.patientId, rxItems);
+                                      }}
+                                    >
+                                      ▶️ Start All Medicines
+                                    </button>
+                                  )}
+                                </div>
 
                                 {rxItems.length > 0 ? (
                                   rxItems.map((m: any, mIdx: number) => {
@@ -351,22 +407,36 @@ export default function NurseDashboard() {
                                           gap: 6,
                                         }}
                                       >
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
                                           <div style={{ fontSize: 12 }}>
                                             <strong style={{ color: 'var(--primary-light)' }}>💊 {m.medicineName} ({m.power || '500mg'})</strong>
                                             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                                               How: <strong style={{ color: '#0ea5e9' }}>{m.route || 'Oral'}</strong> • When: <strong style={{ color: '#f59e0b' }}>{m.timing || 'After Meals'}</strong>
                                             </div>
                                           </div>
-                                          {isMedComplete ? (
-                                            <span className="badge badge-success" style={{ fontSize: 10, fontWeight: 800 }}>
-                                              ✅ Complete (Contact Doctor & Pharmacy)
-                                            </span>
-                                          ) : (
-                                            <span className="badge badge-warning" style={{ fontSize: 10 }}>
-                                              ⏳ {Array.from({ length: daysCount }).filter((_, i) => completedDoses[`${adm.patientId}-${m.medicineName}-day-${i + 1}`]).length}/{daysCount} Days
-                                            </span>
-                                          )}
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                            {!isMedComplete && (
+                                              <button
+                                                className="btn btn-success btn-sm"
+                                                style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 4 }}
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  handleStartMedicine(adm.patientId, m.medicineName, daysCount);
+                                                }}
+                                              >
+                                                ▶️ Start
+                                              </button>
+                                            )}
+                                            {isMedComplete ? (
+                                              <span className="badge badge-success" style={{ fontSize: 10, fontWeight: 800 }}>
+                                                ✅ Complete
+                                              </span>
+                                            ) : (
+                                              <span className="badge badge-warning" style={{ fontSize: 10 }}>
+                                                ⏳ {Array.from({ length: daysCount }).filter((_, i) => completedDoses[`${adm.patientId}-${m.medicineName}-day-${i + 1}`]).length}/{daysCount} Days
+                                              </span>
+                                            )}
+                                          </div>
                                         </div>
 
                                         {/* Duration Checkboxes (Day 1..Day N) */}
@@ -424,37 +494,6 @@ export default function NurseDashboard() {
                                   })
                                 ) : (
                                   <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No prescription recorded yet</span>
-                                )}
-                              </div>
-                            </td>
-                            <td>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                <button
-                                  className="btn btn-primary btn-sm w-full"
-                                  style={{ fontSize: 11 }}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedLabPatient({ patientId: adm.patientId, patientName: adm.patientName, tests: patientLabs });
-                                  }}
-                                >
-                                  🧪 View Lab Reports ({patientLabs.length})
-                                </button>
-
-                                {allDosesComplete && (
-                                  <button
-                                    className="btn btn-sm w-full"
-                                    style={{ background: 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', border: 'none', fontSize: 11, fontWeight: 700 }}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      playNotificationSound();
-                                      toast.success(`✉️ 1-Day Medication Completion Request sent to Doctor & Management for ${adm.patientName}!`);
-                                      if (typeof window !== 'undefined') {
-                                        window.dispatchEvent(new CustomEvent('hospital-data-refresh'));
-                                      }
-                                    }}
-                                  >
-                                    ✉️ Send 1-Day Med Complete Request
-                                  </button>
                                 )}
                               </div>
                             </td>
@@ -976,9 +1015,6 @@ export default function NurseDashboard() {
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
               {/* Prescribed Medicines Section */}
               <div>
-                <h4 style={{ fontSize: 14, fontWeight: 700, marginBottom: 10, color: 'var(--primary-light)' }}>
-                  💊 Prescribed Medicines ("How & When to Take")
-                </h4>
                 {(() => {
                   const modalMedItems = selectedMedPatient.rxItems || (selectedMedPatient.rx?.medicines || selectedMedPatient.rx?.items || []).map((m: any) => ({
                     medicineName: m.medicineName || m.name || 'Prescribed Medicine',
@@ -996,6 +1032,21 @@ export default function NurseDashboard() {
 
                   return (
                     <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+                        <h4 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: 'var(--primary-light)' }}>
+                          💊 Prescribed Medicines ("How & When to Take")
+                        </h4>
+                        {modalMedItems.length > 0 && !allCompletedInModal && (
+                          <button
+                            className="btn btn-success btn-sm"
+                            style={{ fontSize: 11, fontWeight: 700, padding: '5px 14px', background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none', color: '#fff' }}
+                            onClick={() => handleStartAllMedicines(selectedMedPatient.adm.patientId, modalMedItems)}
+                          >
+                            ▶️ Start All Prescribed Medicines
+                          </button>
+                        )}
+                      </div>
+
                       {modalMedItems.length > 0 ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                           {modalMedItems.map((m: any, mIdx: number) => {
@@ -1026,15 +1077,26 @@ export default function NurseDashboard() {
                                     </div>
                                   </div>
 
-                                  {isMedComplete ? (
-                                    <span className="badge badge-success" style={{ padding: '6px 12px', fontSize: 11, fontWeight: 800 }}>
-                                      ✅ Medicine Complete (Contact Doctor & Pharmacy)
-                                    </span>
-                                  ) : (
-                                    <span className="badge badge-warning" style={{ padding: '6px 10px', fontSize: 11, fontWeight: 700 }}>
-                                      ⏳ Dose Progress: {Array.from({ length: daysCount }).filter((_, i) => completedDoses[`${selectedMedPatient.adm.patientId}-${m.medicineName}-day-${i + 1}`]).length}/{daysCount} Days
-                                    </span>
-                                  )}
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    {!isMedComplete && (
+                                      <button
+                                        className="btn btn-success btn-sm"
+                                        style={{ fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 6 }}
+                                        onClick={() => handleStartMedicine(selectedMedPatient.adm.patientId, m.medicineName, daysCount)}
+                                      >
+                                        ▶️ Start Course
+                                      </button>
+                                    )}
+                                    {isMedComplete ? (
+                                      <span className="badge badge-success" style={{ padding: '6px 12px', fontSize: 11, fontWeight: 800 }}>
+                                        ✅ Medicine Complete (Contact Doctor & Pharmacy)
+                                      </span>
+                                    ) : (
+                                      <span className="badge badge-warning" style={{ padding: '6px 10px', fontSize: 11, fontWeight: 700 }}>
+                                        ⏳ Dose Progress: {Array.from({ length: daysCount }).filter((_, i) => completedDoses[`${selectedMedPatient.adm.patientId}-${m.medicineName}-day-${i + 1}`]).length}/{daysCount} Days
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
 
                                 {/* Duration Checkboxes: Disabled once all days ticked */}
@@ -1126,7 +1188,7 @@ export default function NurseDashboard() {
                                   triagePriority: 'Routine',
                                   status: 'normal',
                                 });
-                              } catch (e) {}
+                              } catch (e) { }
 
                               toast.success(`✉️ All medicines marked complete! Sent to Doctor EHR Profile & Pharmacy for ${selectedMedPatient.adm.patientName}!`);
                               if (typeof window !== 'undefined') {

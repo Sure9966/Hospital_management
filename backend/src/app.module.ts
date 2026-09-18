@@ -50,22 +50,27 @@ import { LabModule } from './lab/lab.module';
           configService.get<string>('NODE_ENV') === 'production';
 
         const sslConfig = useSsl
-          ? {
-              rejectUnauthorized:
-                configService.get<string>('DB_SSL_REJECT_UNAUTHORIZED') === 'true',
-            }
+          ? { rejectUnauthorized: false }
           : false;
 
         const extraPoolConfig = {
-          max: 20,
-          min: 2,
-          idleTimeoutMillis: 60000,
-          connectionTimeoutMillis: 60000,
+          max: 10,
+          min: 0,
+          idleTimeoutMillis: 30000,
+          connectionTimeoutMillis: 10000,
           keepAlive: true,
-          keepAliveInitialDelayMillis: 5000,
-          statement_timeout: 60000,
-          query_timeout: 60000,
+          keepAliveInitialDelayMillis: 10000,
+          statement_timeout: 30000,
+          query_timeout: 30000,
         };
+
+        console.log('🔌 DB config:', {
+          mode: databaseUrl ? 'DATABASE_URL' : 'individual',
+          ssl: useSsl,
+          host: databaseUrl
+            ? new URL(databaseUrl).hostname
+            : configService.get('DB_HOST'),
+        });
 
         if (databaseUrl) {
           return {
@@ -75,8 +80,8 @@ import { LabModule } from './lab/lab.module';
             synchronize: true,
             logging: false,
             ssl: sslConfig,
-            retryAttempts: 10,
-            retryDelay: 3000,
+            retryAttempts: 3,
+            retryDelay: 2000,
             extra: extraPoolConfig,
           };
         }
@@ -92,12 +97,73 @@ import { LabModule } from './lab/lab.module';
           synchronize: true,
           logging: false,
           ssl: sslConfig,
-          retryAttempts: 10,
-          retryDelay: 3000,
+          retryAttempts: 3,
+          retryDelay: 2000,
           extra: extraPoolConfig,
         };
       },
     }),
+    // TypeOrmModule.forRootAsync({
+    //   imports: [ConfigModule],
+    //   inject: [ConfigService],
+    //   useFactory: (configService: ConfigService) => {
+    //     const databaseUrl = configService.get<string>('DATABASE_URL');
+    //     const dbSsl = configService.get<string>('DB_SSL');
+
+    //     const useSsl =
+    //       dbSsl === 'true' ||
+    //       (Boolean(databaseUrl) && dbSsl !== 'false') ||
+    //       configService.get<string>('NODE_ENV') === 'production';
+
+    //     const sslConfig = useSsl
+    //       ? {
+    //           rejectUnauthorized:
+    //             configService.get<string>('DB_SSL_REJECT_UNAUTHORIZED') === 'true',
+    //         }
+    //       : false;
+
+    //     const extraPoolConfig = {
+    //       max: 20,
+    //       min: 2,
+    //       idleTimeoutMillis: 60000,
+    //       connectionTimeoutMillis: 60000,
+    //       keepAlive: true,
+    //       keepAliveInitialDelayMillis: 5000,
+    //       statement_timeout: 60000,
+    //       query_timeout: 60000,
+    //     };
+
+    //     if (databaseUrl) {
+    //       return {
+    //         type: 'postgres',
+    //         url: databaseUrl,
+    //         entities: [__dirname + '/**/*.entity{.ts,.js}'],
+    //         synchronize: true,
+    //         logging: false,
+    //         ssl: sslConfig,
+    //         retryAttempts: 10,
+    //         retryDelay: 3000,
+    //         extra: extraPoolConfig,
+    //       };
+    //     }
+
+    //     return {
+    //       type: 'postgres',
+    //       host: configService.get<string>('DB_HOST', 'localhost'),
+    //       port: parseInt(configService.get<string>('DB_PORT', '5432'), 10),
+    //       username: configService.get<string>('DB_USERNAME', 'postgres'),
+    //       password: configService.get<string>('DB_PASSWORD', 'postgres'),
+    //       database: configService.get<string>('DB_NAME', 'hospital_db'),
+    //       entities: [__dirname + '/**/*.entity{.ts,.js}'],
+    //       synchronize: true,
+    //       logging: false,
+    //       ssl: sslConfig,
+    //       retryAttempts: 10,
+    //       retryDelay: 3000,
+    //       extra: extraPoolConfig,
+    //     };
+    //   },
+    // }),
     AuthModule,
     UsersModule,
     PatientsModule,

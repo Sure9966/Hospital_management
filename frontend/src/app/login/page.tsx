@@ -11,6 +11,7 @@ import Logo from '@/components/Logo';
 
 export default function LoginPage() {
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [pageInitializing, setPageInitializing] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
@@ -30,6 +31,7 @@ export default function LoginPage() {
   ];
 
   useEffect(() => {
+    setMounted(true);
     applyTheme(getCurrentTheme());
     if (isLoggedIn()) {
       const user = getUser();
@@ -61,6 +63,10 @@ export default function LoginPage() {
     setForm({ email, password: 'demo123' });
     toast.success(`Pre-filled ${email}`);
   };
+
+  if (!mounted) {
+    return null;
+  }
 
   if (pageInitializing) {
     return <CenteredLoader message="Initializing MediCore HMS..." subtext="Loading theme & hospital services..." />;

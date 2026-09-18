@@ -1,5 +1,5 @@
 'use client';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getToken, getUser } from '@/lib/auth';
 import { applyTheme, getCurrentTheme } from '@/lib/theme';
@@ -7,8 +7,10 @@ import CenteredLoader from '@/components/CenteredLoader';
 
 export default function HomePage() {
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     applyTheme(getCurrentTheme());
     const token = getToken();
     const user = getUser();
@@ -18,6 +20,10 @@ export default function HomePage() {
       router.push('/login');
     }
   }, [router]);
+
+  if (!mounted) {
+    return null;
+  }
 
   return (
     <CenteredLoader
