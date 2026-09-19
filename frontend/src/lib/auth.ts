@@ -6,6 +6,7 @@ export interface User {
   role: 'admin' | 'receptionist' | 'nurse' | 'pharmacist' | 'management' | 'patient' | 'doctor' | 'lab_technician' | 'lab';
   phone?: string;
   department?: string;
+  dutyType?: string;
   profileImage?: string;
 }
 

@@ -48,39 +48,32 @@ export default function NurseDashboard() {
   const [admissions, setAdmissions] = useState<any[]>([]);
   const [prescriptions, setPrescriptions] = useState<any[]>([]);
   const [completedDoses, setCompletedDoses] = useState<Record<string, boolean>>({});
+  const [startedMedicines, setStartedMedicines] = useState<Record<string, boolean>>({});
   const [selectedLabPatient, setSelectedLabPatient] = useState<any>(null);
   const [selectedMedPatient, setSelectedMedPatient] = useState<any>(null);
 
-  const handleStartMedicine = (patientId: string, medicineName: string, daysCount: number) => {
-    setCompletedDoses(prev => {
-      const updated = { ...prev };
-      for (let dayNum = 1; dayNum <= daysCount; dayNum++) {
-        const dayKey = `${patientId}-${medicineName}-day-${dayNum}`;
-        updated[dayKey] = true;
-      }
-      return updated;
-    });
+  const handleStartMedicine = (patientId: string, medicineName: string) => {
+    setStartedMedicines(prev => ({
+      ...prev,
+      [`${patientId}-${medicineName}`]: true,
+    }));
     playNotificationSound();
-    toast.success(`▶️ Medication started! All ${daysCount} day doses activated for "${medicineName}".`);
+    toast.success(`▶️ Medication started! Daily checkboxes are now enabled for "${medicineName}".`);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('hospital-data-refresh'));
     }
   };
 
   const handleStartAllMedicines = (patientId: string, rxItems: any[]) => {
-    setCompletedDoses(prev => {
+    setStartedMedicines(prev => {
       const updated = { ...prev };
       rxItems.forEach((m: any) => {
-        const daysCount = Math.max(1, Math.min(14, parseInt(m.duration) || 5));
-        for (let dayNum = 1; dayNum <= daysCount; dayNum++) {
-          const dayKey = `${patientId}-${m.medicineName}-day-${dayNum}`;
-          updated[dayKey] = true;
-        }
+        updated[`${patientId}-${m.medicineName}`] = true;
       });
       return updated;
     });
     playNotificationSound();
-    toast.success(`▶️ All prescribed medicines started & active for patient!`);
+    toast.success(`▶️ All prescribed medicines started! Daily checkboxes enabled.`);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('hospital-data-refresh'));
     }
@@ -392,7 +385,9 @@ export default function NurseDashboard() {
                                 {rxItems.length > 0 ? (
                                   rxItems.map((m: any, mIdx: number) => {
                                     const daysCount = Math.max(1, Math.min(14, parseInt(m.duration) || 5));
-                                    const isMedComplete = Array.from({ length: daysCount }).every((_, dIdx) => completedDoses[`${adm.patientId}-${m.medicineName}-day-${dIdx + 1}`]);
+                                    const medKey = `${adm.patientId}-${m.medicineName}`;
+                                    const isMedComplete = Array.from({ length: daysCount }).every((_, dIdx) => completedDoses[`${medKey}-day-${dIdx + 1}`]);
+                                    const isStarted = !!startedMedicines[medKey] || Array.from({ length: daysCount }).some((_, dIdx) => completedDoses[`${medKey}-day-${dIdx + 1}`]);
 
                                     return (
                                       <div
@@ -410,18 +405,15 @@ export default function NurseDashboard() {
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
                                           <div style={{ fontSize: 12 }}>
                                             <strong style={{ color: 'var(--primary-light)' }}>💊 {m.medicineName} ({m.power || '500mg'})</strong>
-                                            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                                              How: <strong style={{ color: '#0ea5e9' }}>{m.route || 'Oral'}</strong> • When: <strong style={{ color: '#f59e0b' }}>{m.timing || 'After Meals'}</strong>
-                                            </div>
                                           </div>
                                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                            {!isMedComplete && (
+                                            {!isStarted && !isMedComplete && (
                                               <button
                                                 className="btn btn-success btn-sm"
                                                 style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 4 }}
                                                 onClick={(e) => {
                                                   e.stopPropagation();
-                                                  handleStartMedicine(adm.patientId, m.medicineName, daysCount);
+                                                  handleStartMedicine(adm.patientId, m.medicineName);
                                                 }}
                                               >
                                                 ▶️ Start
@@ -433,18 +425,19 @@ export default function NurseDashboard() {
                                               </span>
                                             ) : (
                                               <span className="badge badge-warning" style={{ fontSize: 10 }}>
-                                                ⏳ {Array.from({ length: daysCount }).filter((_, i) => completedDoses[`${adm.patientId}-${m.medicineName}-day-${i + 1}`]).length}/{daysCount} Days
+                                                ⏳ {Array.from({ length: daysCount }).filter((_, i) => completedDoses[`${medKey}-day-${i + 1}`]).length}/{daysCount} Days
                                               </span>
                                             )}
                                           </div>
                                         </div>
 
-                                        {/* Duration Checkboxes (Day 1..Day N) */}
+                                        {/* Duration Checkboxes (Day 1..Day N) - Disabled until Start clicked */}
                                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
                                           {Array.from({ length: daysCount }).map((_, dIdx) => {
                                             const dayNum = dIdx + 1;
-                                            const dayKey = `${adm.patientId}-${m.medicineName}-day-${dayNum}`;
+                                            const dayKey = `${medKey}-day-${dayNum}`;
                                             const isChecked = !!completedDoses[dayKey];
+                                            const isCheckboxDisabled = !isStarted || isMedComplete;
                                             return (
                                               <label
                                                 key={dayNum}
@@ -459,20 +452,21 @@ export default function NurseDashboard() {
                                                   fontSize: 10,
                                                   fontWeight: isChecked ? 700 : 500,
                                                   color: isChecked ? '#10b981' : 'var(--text-main)',
-                                                  cursor: isMedComplete ? 'not-allowed' : 'pointer',
+                                                  cursor: isCheckboxDisabled ? 'not-allowed' : 'pointer',
+                                                  opacity: isCheckboxDisabled ? 0.6 : 1,
                                                 }}
                                                 onClick={(e) => e.stopPropagation()}
                                               >
                                                 <input
                                                   type="checkbox"
                                                   checked={isChecked}
-                                                  disabled={isMedComplete}
+                                                  disabled={isCheckboxDisabled}
                                                   onChange={(e) => {
                                                     e.stopPropagation();
                                                     const newChecked = e.target.checked;
                                                     setCompletedDoses(prev => {
                                                       const updated = { ...prev, [dayKey]: newChecked };
-                                                      const medDoneNow = Array.from({ length: daysCount }).every((_, i) => updated[`${adm.patientId}-${m.medicineName}-day-${i + 1}`]);
+                                                      const medDoneNow = Array.from({ length: daysCount }).every((_, i) => updated[`${medKey}-day-${i + 1}`]);
                                                       if (medDoneNow) {
                                                         playNotificationSound();
                                                         toast.success(`✅ Medicine "${m.medicineName}" complete! Contact Doctor & Pharmacy.`);
@@ -1051,7 +1045,9 @@ export default function NurseDashboard() {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                           {modalMedItems.map((m: any, mIdx: number) => {
                             const daysCount = Math.max(1, Math.min(14, parseInt(m.duration) || 5));
-                            const isMedComplete = Array.from({ length: daysCount }).every((_, dIdx) => completedDoses[`${selectedMedPatient.adm.patientId}-${m.medicineName}-day-${dIdx + 1}`]);
+                            const medKey = `${selectedMedPatient.adm.patientId}-${m.medicineName}`;
+                            const isMedComplete = Array.from({ length: daysCount }).every((_, dIdx) => completedDoses[`${medKey}-day-${dIdx + 1}`]);
+                            const isStarted = !!startedMedicines[medKey] || Array.from({ length: daysCount }).some((_, dIdx) => completedDoses[`${medKey}-day-${dIdx + 1}`]);
 
                             return (
                               <div
@@ -1070,19 +1066,17 @@ export default function NurseDashboard() {
                                   <div>
                                     <strong style={{ fontSize: 15, color: 'var(--primary-light)' }}>💊 {m.medicineName} ({m.power || '500mg'})</strong>
                                     <div style={{ fontSize: 12, marginTop: 4, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                                      <span>How: <strong style={{ color: '#0ea5e9' }}>{m.route || 'Oral'}</strong></span>
-                                      <span>When: <strong style={{ color: '#f59e0b' }}>{m.timing || 'After Meals'}</strong></span>
                                       <span>Dosage: <strong>{m.dosage}</strong></span>
                                       <span>Duration: <strong>{m.duration || '5 days'} ({daysCount} Days)</strong></span>
                                     </div>
                                   </div>
 
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                    {!isMedComplete && (
+                                    {!isStarted && !isMedComplete && (
                                       <button
                                         className="btn btn-success btn-sm"
                                         style={{ fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 6 }}
-                                        onClick={() => handleStartMedicine(selectedMedPatient.adm.patientId, m.medicineName, daysCount)}
+                                        onClick={() => handleStartMedicine(selectedMedPatient.adm.patientId, m.medicineName)}
                                       >
                                         ▶️ Start Course
                                       </button>
@@ -1093,21 +1087,22 @@ export default function NurseDashboard() {
                                       </span>
                                     ) : (
                                       <span className="badge badge-warning" style={{ padding: '6px 10px', fontSize: 11, fontWeight: 700 }}>
-                                        ⏳ Dose Progress: {Array.from({ length: daysCount }).filter((_, i) => completedDoses[`${selectedMedPatient.adm.patientId}-${m.medicineName}-day-${i + 1}`]).length}/{daysCount} Days
+                                        ⏳ Dose Progress: {Array.from({ length: daysCount }).filter((_, i) => completedDoses[`${medKey}-day-${i + 1}`]).length}/{daysCount} Days
                                       </span>
                                     )}
                                   </div>
                                 </div>
 
-                                {/* Duration Checkboxes: Disabled once all days ticked */}
+                                {/* Duration Checkboxes: Disabled until Start clicked */}
                                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', background: 'var(--bg-card)', padding: 10, borderRadius: 8, border: '1px solid var(--border)' }}>
                                   <div style={{ fontSize: 11, fontWeight: 700, width: '100%', color: 'var(--text-muted)', marginBottom: 2 }}>
                                     📅 Duration Dose Checkboxes (Tick off as administered):
                                   </div>
                                   {Array.from({ length: daysCount }).map((_, dIdx) => {
                                     const dayNum = dIdx + 1;
-                                    const dayKey = `${selectedMedPatient.adm.patientId}-${m.medicineName}-day-${dayNum}`;
+                                    const dayKey = `${medKey}-day-${dayNum}`;
                                     const isChecked = !!completedDoses[dayKey];
+                                    const isCheckboxDisabled = !isStarted || isMedComplete;
                                     return (
                                       <label
                                         key={dayNum}
@@ -1122,19 +1117,19 @@ export default function NurseDashboard() {
                                           fontSize: 12,
                                           fontWeight: isChecked ? 700 : 500,
                                           color: isChecked ? '#10b981' : 'var(--text-main)',
-                                          cursor: isMedComplete ? 'not-allowed' : 'pointer',
-                                          opacity: isMedComplete ? 0.8 : 1,
+                                          cursor: isCheckboxDisabled ? 'not-allowed' : 'pointer',
+                                          opacity: isCheckboxDisabled ? 0.6 : 1,
                                         }}
                                       >
                                         <input
                                           type="checkbox"
                                           checked={isChecked}
-                                          disabled={isMedComplete}
+                                          disabled={isCheckboxDisabled}
                                           onChange={(e) => {
                                             const newChecked = e.target.checked;
                                             setCompletedDoses(prev => {
                                               const updated = { ...prev, [dayKey]: newChecked };
-                                              const medDone = Array.from({ length: daysCount }).every((_, i) => updated[`${selectedMedPatient.adm.patientId}-${m.medicineName}-day-${i + 1}`]);
+                                              const medDone = Array.from({ length: daysCount }).every((_, i) => updated[`${medKey}-day-${i + 1}`]);
                                               if (medDone) {
                                                 playNotificationSound();
                                                 toast.success(`✅ Medicine "${m.medicineName}" all ${daysCount} days complete! Contact Doctor & Pharmacy.`);

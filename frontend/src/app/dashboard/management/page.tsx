@@ -16,6 +16,21 @@ export default function ManagementDashboard() {
   const [broadcastForm, setBroadcastForm] = useState({ title: '', message: '', targetRole: '' });
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<'overview' | 'staff' | 'patients' | 'discharges' | 'opd_records' | 'broadcast'>('overview');
+  const [staffRoleFilter, setStaffRoleFilter] = useState<'all' | 'nurses_doctors' | 'nurse' | 'doctor'>('all');
+  const [updatingDutyId, setUpdatingDutyId] = useState<string | null>(null);
+
+  const handleDutyTypeChange = async (userId: string, dutyType: string) => {
+    setUpdatingDutyId(userId);
+    try {
+      await api.put(`/users/${userId}`, { dutyType });
+      setStaff(prev => prev.map(u => u.id === userId ? { ...u, dutyType } : u));
+      toast.success(`✅ Duty type updated to "${dutyType}"`);
+    } catch {
+      toast.error('Failed to update duty type');
+    } finally {
+      setUpdatingDutyId(null);
+    }
+  };
 
   const loadData = () => {
     api.get('/management/dashboard').then(r => setStats(r.data));
@@ -186,20 +201,122 @@ export default function ManagementDashboard() {
 
         {tab === 'staff' && (
           <div className="card">
-            <div className="card-header"><span className="card-title">👥 All Staff ({staff.length})</span></div>
+            <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+              <span className="card-title">👥 Staff Directory</span>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>Filter Role:</span>
+                <button
+                  className={`btn btn-sm ${staffRoleFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setStaffRoleFilter('all')}
+                >
+                  All Staff ({staff.length})
+                </button>
+                <button
+                  className={`btn btn-sm ${staffRoleFilter === 'nurses_doctors' ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setStaffRoleFilter('nurses_doctors')}
+                >
+                  🩺 Nurses & Doctors Only ({staff.filter(u => ['nurse', 'doctor'].includes((u.role || '').toLowerCase())).length})
+                </button>
+                <button
+                  className={`btn btn-sm ${staffRoleFilter === 'doctor' ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setStaffRoleFilter('doctor')}
+                >
+                  👨‍⚕️ Doctors ({staff.filter(u => (u.role || '').toLowerCase() === 'doctor').length})
+                </button>
+                <button
+                  className={`btn btn-sm ${staffRoleFilter === 'nurse' ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setStaffRoleFilter('nurse')}
+                >
+                  👩‍⚕️ Nurses ({staff.filter(u => (u.role || '').toLowerCase() === 'nurse').length})
+                </button>
+              </div>
+            </div>
             <div className="table-container">
               <table>
-                <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Department</th><th>Status</th></tr></thead>
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Department</th>
+                    <th>Duty Type</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
                 <tbody>
-                  {staff.map(u => (
-                    <tr key={u.id}>
-                      <td><strong>{u.firstName} {u.lastName}</strong></td>
-                      <td>{u.email}</td>
-                      <td><span className="badge" style={{ background: `${roleColors[u.role]}22`, color: roleColors[u.role], border: `1px solid ${roleColors[u.role]}44` }}>{u.role}</span></td>
-                      <td>{u.department || '—'}</td>
-                      <td><span className={`badge ${u.isActive ? 'badge-success' : 'badge-danger'}`}>{u.isActive ? 'Active' : 'Inactive'}</span></td>
-                    </tr>
-                  ))}
+                  {staff
+                    .filter(u => {
+                      const r = (u.role || '').toLowerCase();
+                      if (staffRoleFilter === 'nurses_doctors') return r === 'nurse' || r === 'doctor';
+                      if (staffRoleFilter === 'nurse') return r === 'nurse';
+                      if (staffRoleFilter === 'doctor') return r === 'doctor';
+                      return true;
+                    })
+                    .map(u => {
+                      const role = (u.role || '').toLowerCase();
+                      const isNurse = role === 'nurse';
+                      const isDoctor = role === 'doctor';
+                      const currentDuty = (u.dutyType || (isNurse ? 'OP' : isDoctor ? 'Normal' : '')).toUpperCase();
+
+                      return (
+                        <tr key={u.id}>
+                          <td><strong>{u.firstName} {u.lastName}</strong></td>
+                          <td>{u.email}</td>
+                          <td>
+                            <span className="badge" style={{ background: `${roleColors[u.role] || '#6366f1'}22`, color: roleColors[u.role] || '#6366f1', border: `1px solid ${roleColors[u.role] || '#6366f1'}44` }}>
+                              {u.role}
+                            </span>
+                          </td>
+                          <td>{u.department || '—'}</td>
+                          <td>
+                            {isNurse ? (
+                              <select
+                                className="form-control form-control-sm"
+                                style={{
+                                  width: 125,
+                                  fontSize: 12,
+                                  padding: '3px 8px',
+                                  fontWeight: 600,
+                                  borderRadius: 6,
+                                  borderColor: currentDuty === 'IP' ? '#10b981' : '#0ea5e9',
+                                  background: currentDuty === 'IP' ? 'rgba(16,185,129,0.1)' : 'rgba(14,165,233,0.1)',
+                                  color: currentDuty === 'IP' ? '#10b981' : '#0ea5e9',
+                                }}
+                                value={currentDuty === 'IP' ? 'IP' : 'OP'}
+                                disabled={updatingDutyId === u.id}
+                                onChange={e => handleDutyTypeChange(u.id, e.target.value)}
+                              >
+                                <option value="OP">🏥 OP (Outpatient)</option>
+                                <option value="IP">🛏️ IP (Inpatient)</option>
+                              </select>
+                            ) : isDoctor ? (
+                              <select
+                                className="form-control form-control-sm"
+                                style={{
+                                  width: 135,
+                                  fontSize: 12,
+                                  padding: '3px 8px',
+                                  fontWeight: 600,
+                                  borderRadius: 6,
+                                  borderColor: (currentDuty === 'EMERGENCY' || currentDuty === 'EMERGENCY DUTY') ? '#ef4444' : '#6366f1',
+                                  background: (currentDuty === 'EMERGENCY' || currentDuty === 'EMERGENCY DUTY') ? 'rgba(239,68,68,0.1)' : 'rgba(99,102,241,0.1)',
+                                  color: (currentDuty === 'EMERGENCY' || currentDuty === 'EMERGENCY DUTY') ? '#ef4444' : '#6366f1',
+                                }}
+                                value={(currentDuty === 'EMERGENCY' || currentDuty === 'EMERGENCY DUTY') ? 'Emergency' : 'Normal'}
+                                disabled={updatingDutyId === u.id}
+                                onChange={e => handleDutyTypeChange(u.id, e.target.value)}
+                              >
+                                <option value="Normal">👨‍⚕️ Normal</option>
+                                <option value="Emergency">🚨 Emergency</option>
+                              </select>
+                            ) : (
+                              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>
+                            )}
+                          </td>
+                          <td><span className={`badge ${u.isActive ? 'badge-success' : 'badge-danger'}`}>{u.isActive ? 'Active' : 'Inactive'}</span></td>
+                        </tr>
+                      );
+                    })}
                 </tbody>
               </table>
             </div>

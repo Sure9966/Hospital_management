@@ -417,7 +417,7 @@ export default function PharmacistDashboard() {
 
                 <div className="form-grid form-grid-2" style={{ marginBottom: 14 }}>
                   <div className="form-group">
-                    <label className="form-label">Price per Tablet (₹ / $) *</label>
+                    <label className="form-label">Price per Tablet (₹) *</label>
                     <input
                       type="number"
                       step="0.01"

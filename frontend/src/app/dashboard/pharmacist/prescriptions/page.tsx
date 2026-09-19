@@ -17,12 +17,12 @@ export default function PrescriptionsPage() {
   const [selectedPrescription, setSelectedPrescription] = useState<any>(null);
   const [medicines, setMedicines] = useState([{ ...emptyMed }]);
   const [form, setForm] = useState({ patientId: '', patientName: '', doctorName: '', diagnosis: '', notes: '', discountAmount: 0, taxAmount: 0 });
-  
+
   // Dispense Form State
   const [dispenseDiscount, setDispenseDiscount] = useState<number>(0);
   const [dispenseTax, setDispenseTax] = useState<number>(0);
   const [dispenseBillingStatus, setDispenseBillingStatus] = useState<string>('billed');
-  
+
   const [loading, setLoading] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -151,7 +151,7 @@ export default function PrescriptionsPage() {
       });
       const blob = new Blob([response.data], { type: 'application/pdf' });
       const blobUrl = URL.createObjectURL(blob);
-      
+
       const printWindow = window.open(blobUrl, '_blank');
       if (printWindow) {
         printWindow.focus();
@@ -268,16 +268,16 @@ export default function PrescriptionsPage() {
                         <div className="flex gap-1" style={{ flexDirection: 'column' }}>
                           {p.medicines?.map((m: any, idx: number) => (
                             <div key={idx} style={{ fontSize: 12 }}>
-                              <strong>💊 {m.name}</strong> ×{m.quantity} (${Number(m.unitCost || 0).toFixed(2)}/u) = <span style={{ fontWeight: 600, color: '#38bdf8' }}>${Number(m.lineTotal || (m.quantity * m.unitCost) || 0).toFixed(2)}</span>
+                              <strong>💊 {m.name}</strong> ×{m.quantity} (₹{Number(m.unitCost || 0).toFixed(2)}/u) = <span style={{ fontWeight: 600, color: '#38bdf8' }}>₹{Number(m.lineTotal || (m.quantity * m.unitCost) || 0).toFixed(2)}</span>
                             </div>
                           ))}
                         </div>
                       </td>
                       <td>
                         <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-main)' }}>
-                          ${Number(p.totalCost || 0).toFixed(2)}
+                          ₹{Number(p.totalCost || 0).toFixed(2)}
                         </div>
-                        {Number(p.discountAmount) > 0 && <div style={{ fontSize: 11, color: '#ef4444' }}>Disc: -${p.discountAmount}</div>}
+                        {Number(p.discountAmount) > 0 && <div style={{ fontSize: 11, color: '#ef4444' }}>Disc: -₹{p.discountAmount}</div>}
                       </td>
                       <td><span className={statusBadge(p.status)}>{p.status}</span></td>
                       <td>
@@ -331,7 +331,7 @@ export default function PrescriptionsPage() {
                   </div>
                   <div>
                     <label className="form-label" style={{ fontSize: 11, margin: 0 }}>DOCTOR</label>
-                    <div style={{ fontWeight: 700 }}>Dr. {selectedPrescription.doctorName}</div>
+                    <div style={{ fontWeight: 700 }}>{selectedPrescription.doctorName}</div>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Diagnosis: {selectedPrescription.diagnosis || 'None'}</div>
                   </div>
                 </div>
@@ -342,10 +342,10 @@ export default function PrescriptionsPage() {
                     <div key={i} style={{ background: 'var(--bg-surface)', padding: 10, borderRadius: 6, border: '1px solid var(--border)', fontSize: 12 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600 }}>
                         <span>💊 {m.name} ({m.dosage})</span>
-                        <span>${Number(m.lineTotal || (m.quantity * m.unitCost) || 0).toFixed(2)}</span>
+                        <span>₹{Number(m.lineTotal || (m.quantity * m.unitCost) || 0).toFixed(2)}</span>
                       </div>
                       <div style={{ color: 'var(--text-secondary)', marginTop: 4 }}>
-                        Qty: {m.quantity} × ${Number(m.unitCost || 0).toFixed(2)} | Freq: {m.frequency || 'N/A'} | Duration: {m.duration || 'N/A'}
+                        Qty: {m.quantity} × ₹{Number(m.unitCost || 0).toFixed(2)} | Freq: {m.frequency || 'N/A'} | Duration: {m.duration || 'N/A'}
                       </div>
                     </div>
                   ))}
@@ -360,19 +360,19 @@ export default function PrescriptionsPage() {
                   </h4>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
                     <span style={{ color: 'var(--text-secondary)' }}>Subtotal:</span>
-                    <span>${Number(selectedPrescription.subtotal || 0).toFixed(2)}</span>
+                    <span>₹{Number(selectedPrescription.subtotal || 0).toFixed(2)}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
                     <span style={{ color: 'var(--text-secondary)' }}>Discount:</span>
-                    <span style={{ color: '#ef4444' }}>-${Number(selectedPrescription.discountAmount || 0).toFixed(2)}</span>
+                    <span style={{ color: '#ef4444' }}>-₹{Number(selectedPrescription.discountAmount || 0).toFixed(2)}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 10 }}>
                     <span style={{ color: 'var(--text-secondary)' }}>Tax / Fee:</span>
-                    <span>+${Number(selectedPrescription.taxAmount || 0).toFixed(2)}</span>
+                    <span>+₹{Number(selectedPrescription.taxAmount || 0).toFixed(2)}</span>
                   </div>
                   <div style={{ borderTop: '2px solid var(--border)', paddingTop: 8, display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15 }}>
                     <span>Total Cost:</span>
-                    <span style={{ color: '#38bdf8' }}>${Number(selectedPrescription.totalCost || 0).toFixed(2)}</span>
+                    <span style={{ color: '#38bdf8' }}>₹{Number(selectedPrescription.totalCost || 0).toFixed(2)}</span>
                   </div>
 
                   <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px dashed var(--border)', fontSize: 12 }}>
@@ -380,7 +380,7 @@ export default function PrescriptionsPage() {
                     <div style={{ marginTop: 6 }}><strong>Dispense Status:</strong> <span className={statusBadge(selectedPrescription.status)}>{selectedPrescription.status}</span></div>
                     {selectedPrescription.invoicePdfHash && (
                       <div style={{ marginTop: 10, fontSize: 10, color: 'var(--text-muted)', background: 'var(--bg-card)', padding: 6, borderRadius: 4 }}>
-                        🔒 Hash Verified<br/>
+                        🔒 Hash Verified<br />
                         SHA-256 Metadata stored
                       </div>
                     )}
@@ -449,13 +449,13 @@ export default function PrescriptionsPage() {
                     return (
                       <div key={i} className="card" style={{ marginBottom: 10, padding: 12 }}>
                         <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
-                          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--primary-light)' }}>Item #{i + 1} - Total: ${lineTot.toFixed(2)}</span>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--primary-light)' }}>Item #{i + 1} - Total: ₹{lineTot.toFixed(2)}</span>
                           {medicines.length > 1 && <button type="button" className="btn btn-danger btn-sm btn-icon" onClick={() => removeMed(i)}>✕</button>}
                         </div>
                         <div className="form-grid form-grid-4">
                           <div className="form-group"><label className="form-label">Name *</label><input className="form-control" placeholder="Paracetamol" value={med.name} onChange={e => setMed(i, 'name', e.target.value)} required /></div>
                           <div className="form-group"><label className="form-label">Dosage *</label><input className="form-control" placeholder="500mg" value={med.dosage} onChange={e => setMed(i, 'dosage', e.target.value)} required /></div>
-                          <div className="form-group"><label className="form-label">Unit Cost ($)</label><input type="number" step="0.01" min="0" className="form-control" value={med.unitCost} onChange={e => setMed(i, 'unitCost', parseFloat(e.target.value) || 0)} required /></div>
+                          <div className="form-group"><label className="form-label">Unit Cost (₹)</label><input type="number" step="0.01" min="0" className="form-control" value={med.unitCost} onChange={e => setMed(i, 'unitCost', parseFloat(e.target.value) || 0)} required /></div>
                           <div className="form-group"><label className="form-label">Quantity</label><input type="number" min="1" className="form-control" value={med.quantity} onChange={e => setMed(i, 'quantity', parseInt(e.target.value) || 1)} required /></div>
                         </div>
                         <div className="form-grid form-grid-3" style={{ marginTop: 8 }}>
@@ -481,19 +481,19 @@ export default function PrescriptionsPage() {
                     <div style={{ fontWeight: 700, marginBottom: 8 }}>Automatic Invoice Totals</div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                       <span>Subtotal:</span>
-                      <span>${formSummary.subtotal.toFixed(2)}</span>
+                      <span>₹{formSummary.subtotal.toFixed(2)}</span>
                     </div>
                     <div className="form-group" style={{ marginBottom: 4 }}>
-                      <label className="form-label" style={{ fontSize: 10 }}>Discount ($)</label>
+                      <label className="form-label" style={{ fontSize: 10 }}>Discount (₹)</label>
                       <input type="number" step="0.01" className="form-control form-control-sm" value={form.discountAmount} onChange={e => setF('discountAmount', parseFloat(e.target.value) || 0)} />
                     </div>
                     <div className="form-group" style={{ marginBottom: 6 }}>
-                      <label className="form-label" style={{ fontSize: 10 }}>Tax / Charge ($)</label>
+                      <label className="form-label" style={{ fontSize: 10 }}>Tax / Charge (₹)</label>
                       <input type="number" step="0.01" className="form-control form-control-sm" value={form.taxAmount} onChange={e => setF('taxAmount', parseFloat(e.target.value) || 0)} />
                     </div>
                     <div style={{ borderTop: '1px solid var(--border)', paddingTop: 6, fontWeight: 700, display: 'flex', justifyContent: 'space-between' }}>
                       <span>Total:</span>
-                      <span style={{ color: '#38bdf8' }}>${formSummary.total.toFixed(2)}</span>
+                      <span style={{ color: '#38bdf8' }}>₹{formSummary.total.toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
@@ -522,18 +522,18 @@ export default function PrescriptionsPage() {
               <p style={{ marginBottom: 12, color: 'var(--text-secondary)' }}>
                 Dispensing <strong>{showDispenseModal.prescriptionId}</strong> for <strong>{showDispenseModal.patientName}</strong>
               </p>
-              
+
               <div style={{ background: 'var(--bg-surface)', padding: 12, borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
                   <span>Calculated Subtotal:</span>
-                  <strong>${dispenseSummary.subtotal.toFixed(2)}</strong>
+                  <strong>₹{dispenseSummary.subtotal.toFixed(2)}</strong>
                 </div>
                 <div className="form-group" style={{ marginBottom: 8 }}>
-                  <label className="form-label">Discount Amount ($)</label>
+                  <label className="form-label">Discount Amount (₹)</label>
                   <input type="number" step="0.01" className="form-control" value={dispenseDiscount} onChange={e => setDispenseDiscount(parseFloat(e.target.value) || 0)} />
                 </div>
                 <div className="form-group" style={{ marginBottom: 8 }}>
-                  <label className="form-label">Tax / Additional Charges ($)</label>
+                  <label className="form-label">Tax / Additional Charges (₹)</label>
                   <input type="number" step="0.01" className="form-control" value={dispenseTax} onChange={e => setDispenseTax(parseFloat(e.target.value) || 0)} />
                 </div>
                 <div className="form-group" style={{ marginBottom: 8 }}>
@@ -545,7 +545,7 @@ export default function PrescriptionsPage() {
                 </div>
                 <div style={{ borderTop: '1px solid var(--border)', paddingTop: 8, display: 'flex', justifyContent: 'space-between', fontSize: 15, fontWeight: 700 }}>
                   <span>Final Total:</span>
-                  <span style={{ color: '#38bdf8' }}>${dispenseSummary.total.toFixed(2)}</span>
+                  <span style={{ color: '#38bdf8' }}>₹{dispenseSummary.total.toFixed(2)}</span>
                 </div>
               </div>
             </div>

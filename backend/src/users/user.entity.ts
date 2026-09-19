@@ -44,6 +44,9 @@ export class User {
   department: string;
 
   @Column({ nullable: true })
+  dutyType: string;
+
+  @Column({ nullable: true })
   profileImage: string;
 
   @Column({ default: true })

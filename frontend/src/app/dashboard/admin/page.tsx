@@ -17,6 +17,7 @@ interface UserItem {
   role: RoleKey;
   phone: string;
   department: string;
+  dutyType?: string;
   isActive: boolean;
   isApproved: boolean;
   permissions: string[];
@@ -43,11 +44,27 @@ const ROLE_META: Record<RoleKey, { label: string; badge: string; color: string; 
   patient: { label: 'Patient', badge: 'badge-gray', color: '#94a3b8', bg: 'rgba(148,163,184,0.15)', dashboard: '' },
 };
 
-// const DEPARTMENTS = [
-//   'Administration', 'Reception', 'Emergency & Triage', 'Pharmacy',
-//   'Management', 'ICU', 'Cardiology', 'Neurology', 'Orthopedics',
-//   'Pediatrics', 'Radiology', 'Laboratory', 'Surgery', 'Oncology',
-// ];
+const DEFAULT_ROLE_META = {
+  label: 'Employee',
+  badge: 'badge-gray',
+  color: '#94a3b8',
+  bg: 'rgba(148,163,184,0.15)',
+  dashboard: '/dashboard',
+};
+
+function getRoleMeta(role?: string) {
+  if (!role) return DEFAULT_ROLE_META;
+  const key = role.toLowerCase() as RoleKey;
+  if (ROLE_META[key]) return ROLE_META[key];
+  return {
+    label: role.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()),
+    badge: 'badge-gray',
+    color: '#94a3b8',
+    bg: 'rgba(148,163,184,0.15)',
+    dashboard: '/dashboard',
+  };
+}
+
 const DEPARTMENTS: Record<RoleKey, string[]> = {
   admin: [
     'Administration',
@@ -89,6 +106,12 @@ const DEPARTMENTS: Record<RoleKey, string[]> = {
     'Patient',
   ],
 };
+
+function getDepartmentsForRole(role?: string): string[] {
+  if (!role) return ['General'];
+  const key = role.toLowerCase() as RoleKey;
+  return DEPARTMENTS[key] || ['General'];
+}
 const BLANK_FORM = {
   firstName: '', lastName: '', email: '', password: '',
   role: 'receptionist' as RoleKey, department: '', phone: '',
@@ -279,7 +302,7 @@ export default function AdminDashboardPage() {
         phone: form.phone,
         isApproved: form.isApproved,
       });
-      toast.success(`✅ Employee "${form.firstName} ${form.lastName}" created → redirects to ${ROLE_META[form.role].dashboard}`);
+      toast.success(`✅ Employee "${form.firstName} ${form.lastName}" created → redirects to ${getRoleMeta(form.role).dashboard}`);
       setForm({ ...BLANK_FORM });
       setShowCreatePanel(false);
       fetchUsers();
@@ -502,7 +525,7 @@ export default function AdminDashboardPage() {
                     <tr key={u.id}>
                       <td className="font-semibold">{u.firstName} {u.lastName}</td>
                       <td><code style={{ fontSize: 12 }}>{u.email}</code></td>
-                      <td><span className={`badge ${ROLE_META[u.role].badge}`}>{ROLE_META[u.role].label}</span></td>
+                      <td><span className={`badge ${getRoleMeta(u.role).badge}`}>{getRoleMeta(u.role).label}</span></td>
                       <td>{u.department || '—'}</td>
                       <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{new Date(u.createdAt).toLocaleDateString()}</td>
                       <td>
@@ -541,7 +564,7 @@ export default function AdminDashboardPage() {
           <select className="form-control" style={{ width: 160 }} value={roleFilter} onChange={e => setRoleFilter(e.target.value as any)}>
             <option value="all">All Roles ({users.length})</option>
             {(Object.keys(ROLE_META) as RoleKey[]).map(r => (
-              <option key={r} value={r}>{ROLE_META[r].label} ({roleCounts[r] || 0})</option>
+              <option key={r} value={r}>{getRoleMeta(r).label} ({roleCounts[r] || 0})</option>
             ))}
           </select>
           <select className="form-control" style={{ width: 150 }} value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)}>
@@ -602,7 +625,7 @@ export default function AdminDashboardPage() {
                   </tr>
                 ) : (
                   filtered.map((u, idx) => {
-                    const meta = ROLE_META[u.role];
+                    const meta = getRoleMeta(u.role);
                     return (
                       <tr key={u.id}>
                         <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{idx + 1}</td>
@@ -731,32 +754,24 @@ export default function AdminDashboardPage() {
                         ...form,
                         role: newRole,
                         department:
-                          DEPARTMENTS[newRole].length === 1
-                            ? DEPARTMENTS[newRole][0]
+                          getDepartmentsForRole(newRole).length === 1
+                            ? getDepartmentsForRole(newRole)[0]
                             : '',
                       });
                     }} >
                     {(Object.keys(ROLE_META) as RoleKey[]).map(r => (
-                      <option key={r} value={r}>{ROLE_META[r].label}</option>
+                      <option key={r} value={r}>{getRoleMeta(r).label}</option>
                     ))}
                   </select>
                   <span style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
-                    → Redirects to {ROLE_META[form.role].dashboard}
+                    → Redirects to {getRoleMeta(form.role).dashboard}
                   </span>
                 </F>
-                {/* <F label="Department" error={formErrors.department}>
-                  <select className="form-control" value={form.department}
-                    onChange={e => setForm({ ...form, department: e.target.value })}>
-                    <option value="">— Select Department —</option>
-                    {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
-                    <option value="other">Other / Custom</option>
-                  </select>
-                </F> */}
                 <F label="Department *" error={formErrors.department}>
                   <select className="form-control" value={form.department} required
                     onChange={e => setForm({ ...form, department: e.target.value })}>
                     <option value="">— Select Department —</option>
-                    {DEPARTMENTS[form.role].map(department => (
+                    {getDepartmentsForRole(form.role).map(department => (
                       <option key={department} value={department}>{department}</option>
                     ))}
                   </select>
@@ -792,15 +807,15 @@ export default function AdminDashboardPage() {
               </div>
 
               {/* Role preview card */}
-              <div style={{ background: ROLE_META[form.role].bg, border: `1px solid ${ROLE_META[form.role].color}`, borderRadius: 12, padding: '12px 16px' }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: ROLE_META[form.role].color, marginBottom: 4 }}>
+              <div style={{ background: getRoleMeta(form.role).bg, border: `1px solid ${getRoleMeta(form.role).color}`, borderRadius: 12, padding: '12px 16px' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: getRoleMeta(form.role).color, marginBottom: 4 }}>
                   Role Preview
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--text-primary)' }}>
                   After login, <strong>{form.email || 'this employee'}</strong> will be automatically redirected to:
                 </div>
-                <code style={{ fontSize: 13, color: ROLE_META[form.role].color, marginTop: 4, display: 'block' }}>
-                  {ROLE_META[form.role].dashboard}
+                <code style={{ fontSize: 13, color: getRoleMeta(form.role).color, marginTop: 4, display: 'block' }}>
+                  {getRoleMeta(form.role).dashboard}
                 </code>
               </div>
 
@@ -850,24 +865,17 @@ export default function AdminDashboardPage() {
                     <select className="form-control" value={editUser.role}
                       onChange={e => setEditUser({ ...editUser, role: e.target.value as RoleKey })}>
                       {(Object.keys(ROLE_META) as RoleKey[]).map(r => (
-                        <option key={r} value={r}>{ROLE_META[r].label}</option>
+                        <option key={r} value={r}>{getRoleMeta(r).label}</option>
                       ))}
                     </select>
-                    <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>→ {ROLE_META[editUser.role].dashboard}</span>
+                    <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>→ {getRoleMeta(editUser.role).dashboard}</span>
                   </F>
-                  {/* <F label="Department">
-                    <select className="form-control" value={editUser.department || ''}
-                      onChange={e => setEditUser({ ...editUser, department: e.target.value })}>
-                      <option value="">— Select —</option>
-                      {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
-                    </select>
-                  </F> */}
                   <F label="Department *" error={formErrors.department} >
                     <select className="form-control" value={editUser.department} required
                       onChange={e => setEditUser({ ...editUser, department: e.target.value, })}
                     >
                       <option value="">— Select Department —</option>
-                      {DEPARTMENTS[editUser.role].map(
+                      {getDepartmentsForRole(editUser.role).map(
                         department => (
                           <option
                             key={department}
@@ -905,8 +913,8 @@ export default function AdminDashboardPage() {
                   </F>
                 </div>
 
-                <div style={{ background: ROLE_META[editUser.role].bg, border: `1px solid ${ROLE_META[editUser.role].color}`, borderRadius: 10, padding: '10px 14px', fontSize: 12, color: ROLE_META[editUser.role].color }}>
-                  After login, this account will open: <strong>{ROLE_META[editUser.role].dashboard}</strong>
+                <div style={{ background: getRoleMeta(editUser.role).bg, border: `1px solid ${getRoleMeta(editUser.role).color}`, borderRadius: 10, padding: '10px 14px', fontSize: 12, color: getRoleMeta(editUser.role).color }}>
+                  After login, this account will open: <strong>{getRoleMeta(editUser.role).dashboard}</strong>
                 </div>
               </div>
               <div className="modal-footer">
@@ -939,7 +947,7 @@ export default function AdminDashboardPage() {
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>
                   <code>{deleteTarget.email}</code>
                 </div>
-                <span className={`badge ${ROLE_META[deleteTarget.role].badge}`}>{ROLE_META[deleteTarget.role].label}</span>
+                <span className={`badge ${getRoleMeta(deleteTarget.role).badge}`}>{getRoleMeta(deleteTarget.role).label}</span>
               </div>
               <p style={{ fontSize: 14, color: 'var(--text-primary)', marginBottom: 8 }}>
                 This will <strong>permanently delete</strong> the employee record from the PostgreSQL <code>users</code> table. This action cannot be undone.

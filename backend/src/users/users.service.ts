@@ -143,7 +143,7 @@ export class UsersService implements OnModuleInit {
 
   async findAll() {
     return this.usersRepo.find({
-      select: ['id', 'email', 'firstName', 'lastName', 'role', 'phone', 'department', 'isActive', 'isApproved', 'permissions', 'createdAt'],
+      select: ['id', 'email', 'firstName', 'lastName', 'role', 'phone', 'department', 'dutyType', 'isActive', 'isApproved', 'permissions', 'createdAt'],
       order: { createdAt: 'DESC' },
     });
   }

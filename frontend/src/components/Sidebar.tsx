@@ -24,6 +24,7 @@ const roleMenus: Record<string, { icon: string; label: string; href: string }[]>
   ],
   nurse: [
     { icon: '📊', label: 'Nurse Dashboard', href: '/dashboard/nurse', },
+    { icon: '🩺', label: 'Inpatient Monitoring (IP)', href: '/dashboard/nurse/inpatient-monitoring', },
     { icon: '💗', label: 'Vitals Overview', href: '/dashboard/nurse?tab=vitals', },
     { icon: '🚨', label: 'Triage & Priority', href: '/dashboard/nurse?tab=triage', },
     { icon: '📂', label: 'Patient History', href: '/dashboard/nurse?tab=history', },
