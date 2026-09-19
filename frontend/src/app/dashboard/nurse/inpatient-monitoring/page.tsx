@@ -4,6 +4,7 @@ import DashboardLayout from '@/components/DashboardLayout';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import { getUser, User } from '@/lib/auth';
+import { playNotificationSound } from '@/lib/sound';
 
 // ─── 5 Main Categories & 32 Subheadings Definitions ───────────────────────────
 interface SubheadingDef {
@@ -123,6 +124,10 @@ export default function InpatientMonitoringDashboard() {
   const [dbLabs, setDbLabs] = useState<any[]>([]);
   const [loadingDb, setLoadingDb] = useState<boolean>(false);
 
+  // Started medicines and completed doses states for MAR
+  const [startedMedicines, setStartedMedicines] = useState<Record<string, boolean>>({});
+  const [completedDoses, setCompletedDoses] = useState<Record<string, boolean>>({});
+
   // Form input state per patient and subheading
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [savingCategory, setSavingCategory] = useState<boolean>(false);
@@ -180,6 +185,16 @@ export default function InpatientMonitoringDashboard() {
     setSelectedPatientId(id);
     const found = patients.find(p => p.id === id);
     setSelectedPatient(found || null);
+  };
+
+  // MAR Start Medicine Handler
+  const handleStartMedicine = (medKey: string, medicineName: string) => {
+    setStartedMedicines(prev => ({
+      ...prev,
+      [medKey]: true,
+    }));
+    playNotificationSound();
+    toast.success(`▶️ Medication started! Dose checkboxes are now enabled for "${medicineName}".`);
   };
 
   // Safe field getter/setter
@@ -311,7 +326,7 @@ export default function InpatientMonitoringDashboard() {
               <div style={{ fontSize: 14, fontWeight: 700, color: '#10b981' }}>{selectedPatient.ward || 'ICU Ward'} - Bed 102</div>
             </div>
             <div>
-              <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 700 }}> Temp / BP</span>
+              <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 700 }}>Real-time DB Temp / BP</span>
               <div style={{ fontSize: 14, fontWeight: 700, color: '#0ea5e9' }}>
                 {latestVital.temperature ? `${latestVital.temperature}°F` : '98.6°F'} | {latestVital.bloodPressure ? latestVital.bloodPressure : '120/80 mmHg'}
               </div>
@@ -387,7 +402,6 @@ export default function InpatientMonitoringDashboard() {
 
         {/* Quick Anchor Jumper Bar */}
         <div style={{ padding: '10px 16px', background: 'var(--bg-surface)', borderTop: '1px solid var(--border)', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          {/* <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Jump to Subheading:</span> */}
           {activeSubheadings.map(sub => (
             <a
               key={sub.id}
@@ -413,7 +427,6 @@ export default function InpatientMonitoringDashboard() {
                   <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{sub.description}</div>
                 </div>
               </div>
-              <span className="badge badge-info" style={{ fontSize: 10 }}>Subheading #{sub.id}</span>
             </div>
 
             <div className="card-body">
@@ -424,6 +437,11 @@ export default function InpatientMonitoringDashboard() {
                 prescriptions={patientPrescriptions}
                 consultations={patientConsultations}
                 labs={patientLabs}
+                startedMedicines={startedMedicines}
+                setStartedMedicines={setStartedMedicines}
+                completedDoses={completedDoses}
+                setCompletedDoses={setCompletedDoses}
+                handleStartMedicine={handleStartMedicine}
                 getFieldValue={getFieldValue}
                 handleInputChange={handleInputChange}
               />
@@ -435,6 +453,51 @@ export default function InpatientMonitoringDashboard() {
   );
 }
 
+// Helper to compute dose / daily tracking checkboxes
+function getDoseBoxes(duration?: string, frequency?: string) {
+  const dur = (duration || '').toLowerCase();
+  const freq = (frequency || '').toLowerCase();
+
+  const daysMatch = dur.match(/(\d+)\s*day/);
+  if (daysMatch) {
+    const count = parseInt(daysMatch[1]);
+    return Array.from({ length: Math.min(count, 30) }, (_, i) => ({
+      id: `day_${i + 1}`,
+      label: `Day ${i + 1}`,
+    }));
+  } else if (dur.includes('1 month') || dur.includes('month')) {
+    return Array.from({ length: 30 }, (_, i) => ({ id: `day_${i + 1}`, label: `Day ${i + 1}` }));
+  }
+
+  if (freq.includes('three') || freq.includes('tds') || freq.includes('3 times')) {
+    return [
+      { id: 'dose_1', label: 'Morning (08:00 AM)' },
+      { id: 'dose_2', label: 'Afternoon (02:00 PM)' },
+      { id: 'dose_3', label: 'Night (08:00 PM)' },
+    ];
+  } else if (freq.includes('twice') || freq.includes('bd') || freq.includes('2 times')) {
+    return [
+      { id: 'dose_1', label: 'Morning (08:00 AM)' },
+      { id: 'dose_2', label: 'Night (08:00 PM)' },
+    ];
+  } else if (freq.includes('four') || freq.includes('qd') || freq.includes('4 times')) {
+    return [
+      { id: 'dose_1', label: '06:00 AM' },
+      { id: 'dose_2', label: '12:00 PM' },
+      { id: 'dose_3', label: '06:00 PM' },
+      { id: 'dose_4', label: '12:00 AM' },
+    ];
+  }
+
+  return [
+    { id: 'day_1', label: 'Day 1' },
+    { id: 'day_2', label: 'Day 2' },
+    { id: 'day_3', label: 'Day 3' },
+    { id: 'day_4', label: 'Day 4' },
+    { id: 'day_5', label: 'Day 5' },
+  ];
+}
+
 // ─── Sub-Component for Rendering Real-time Database Subheading Information ───
 function RealtimeSubheadingRenderer({
   subheadingId,
@@ -443,6 +506,11 @@ function RealtimeSubheadingRenderer({
   prescriptions,
   consultations,
   labs,
+  startedMedicines,
+  setStartedMedicines,
+  completedDoses,
+  setCompletedDoses,
+  handleStartMedicine,
   getFieldValue,
   handleInputChange,
 }: {
@@ -452,6 +520,11 @@ function RealtimeSubheadingRenderer({
   prescriptions: any[];
   consultations: any[];
   labs: any[];
+  startedMedicines: Record<string, boolean>;
+  setStartedMedicines: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  completedDoses: Record<string, boolean>;
+  setCompletedDoses: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  handleStartMedicine: (medKey: string, medicineName: string) => void;
   getFieldValue: (subId: number, field: string, defaultVal?: string) => string;
   handleInputChange: (subId: number, field: string, val: any) => void;
 }) {
@@ -523,75 +596,166 @@ function RealtimeSubheadingRenderer({
         // Flatten all medicines from DB prescriptions
         const medsList: any[] = [];
         prescriptions.forEach((p: any) => {
+          const createdAtStr = p.createdAt
+            ? new Date(p.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' (' + new Date(p.createdAt).toLocaleDateString() + ')'
+            : '08:00 AM';
+
           if (Array.isArray(p.medicines) && p.medicines.length > 0) {
             p.medicines.forEach((m: any) => {
               medsList.push({
+                prescriptionId: p.prescriptionId || p.id,
+                createdAtStr,
                 medicineName: m.name || m.medicineName || 'Tablet',
                 dosage: m.dosage || '1 Tab',
                 frequency: m.frequency || 'TDS',
+                duration: m.duration || '5 days',
                 instructions: m.instructions || '',
               });
             });
           } else if (p.medicineName || p.name) {
             medsList.push({
+              prescriptionId: p.prescriptionId || p.id,
+              createdAtStr,
               medicineName: p.medicineName || p.name || 'Tablet',
               dosage: p.dosage || '1 Tab',
               frequency: p.frequency || 'TDS',
+              duration: p.duration || '5 days',
               instructions: p.instructions || '',
             });
           }
         });
 
+        // Sample fallbacks if DB has no items yet
+        const displayList = medsList.length > 0 ? medsList : [
+          {
+            prescriptionId: 'RX-DEMO-1',
+            createdAtStr: '08:00 AM (Today)',
+            medicineName: 'Tab. Paracetamol 650mg',
+            dosage: '650mg (Oral)',
+            frequency: 'TDS (After meals)',
+            duration: '5 days',
+            instructions: 'Take after meals',
+          },
+          {
+            prescriptionId: 'RX-DEMO-2',
+            createdAtStr: '10:30 AM (Today)',
+            medicineName: 'Inj. Ceftriaxone 1g',
+            dosage: '1g (IV)',
+            frequency: 'BD (12-hourly)',
+            duration: '3 days',
+            instructions: '12-hourly IV infusion',
+          }
+        ];
+
         return (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div className="badge badge-warning" style={{ alignSelf: 'flex-start' }}>
-              💊 Prescribed Tablets & Medicines ({medsList.length > 0 ? medsList.length : 'Default'} Items)
+              💊 Medication Administration Record — Prescribed Medicines ({displayList.length} Items)
             </div>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Tablet / Medicine Name</th>
-                  <th>Dose & Route</th>
-                  <th>Frequency & Instructions</th>
-                  <th>08:00 AM</th>
-                  <th>02:00 PM</th>
-                  <th>08:00 PM</th>
-                </tr>
-              </thead>
-              <tbody>
-                {medsList.length === 0 ? (
-                  <>
-                    <tr>
-                      <td><strong>Tab. Paracetamol 650mg</strong></td>
-                      <td>650mg (Oral)</td>
-                      <td>TDS (After meals)</td>
-                      <td><input type="checkbox" defaultChecked /> Given</td>
-                      <td><input type="checkbox" defaultChecked /> Given</td>
-                      <td><input type="checkbox" /> Pending</td>
-                    </tr>
-                    <tr>
-                      <td><strong>Inj. Ceftriaxone 1g</strong></td>
-                      <td>1g (IV)</td>
-                      <td>BD (12-hourly)</td>
-                      <td><input type="checkbox" defaultChecked /> Given</td>
-                      <td>—</td>
-                      <td><input type="checkbox" /> Pending</td>
-                    </tr>
-                  </>
-                ) : (
-                  medsList.map((m, i) => (
-                    <tr key={i}>
-                      <td><strong>💊 {m.medicineName}</strong></td>
-                      <td>{m.dosage}</td>
-                      <td>{m.frequency} {m.instructions ? `(${m.instructions})` : ''}</td>
-                      <td><input type="checkbox" defaultChecked /> Given</td>
-                      <td><input type="checkbox" defaultChecked /> Given</td>
-                      <td><input type="checkbox" /> Pending</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+
+            <div className="table-container">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Tablet / Medicine Name</th>
+                    <th>Dose & Route</th>
+                    <th>Prescription Creation & Timings</th>
+                    <th>Frequency & Duration</th>
+                    <th>Start Medicine</th>
+                    <th>Dose / Daily Administration Tracking</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayList.map((m, i) => {
+                    const medKey = `${patient?.id || 'demo'}-${m.medicineName}`;
+                    const isStarted = !!startedMedicines[medKey];
+                    const boxes = getDoseBoxes(m.duration, m.frequency);
+
+                    return (
+                      <tr key={i}>
+                        <td><strong>💊 {m.medicineName}</strong></td>
+                        <td>{m.dosage}</td>
+                        <td>
+                          <div style={{ fontWeight: 600, fontSize: 12 }}>⏰ {m.createdAtStr}</div>
+                          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+                            Timing: 08:00 AM, 02:00 PM, 08:00 PM
+                          </div>
+                        </td>
+                        <td>
+                          <div style={{ fontWeight: 600, fontSize: 12 }}>{m.frequency}</div>
+                          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+                            Duration: {m.duration} {m.instructions ? `(${m.instructions})` : ''}
+                          </div>
+                        </td>
+                        <td>
+                          {isStarted ? (
+                            <span className="badge badge-success" style={{ padding: '6px 10px', fontSize: 11 }}>
+                              🟢 Started / Active
+                            </span>
+                          ) : (
+                            <button
+                              className="btn btn-success btn-sm"
+                              style={{ fontWeight: 700 }}
+                              onClick={() => handleStartMedicine(medKey, m.medicineName)}
+                            >
+                              ▶️ Start Medicine
+                            </button>
+                          )}
+                        </td>
+                        <td>
+                          <div style={{ opacity: isStarted ? 1 : 0.45, transition: 'opacity 0.2s ease' }}>
+                            {!isStarted && (
+                              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600 }}>
+                                🔒 Click "▶️ Start Medicine" to enable checkboxes
+                              </div>
+                            )}
+                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                              {boxes.map(box => {
+                                const boxKey = `${medKey}-${box.id}`;
+                                const isChecked = !!completedDoses[boxKey];
+
+                                return (
+                                  <label
+                                    key={box.id}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: 5,
+                                      padding: '4px 8px',
+                                      borderRadius: 6,
+                                      background: isChecked ? 'rgba(16,185,129,0.15)' : 'var(--bg-surface)',
+                                      border: `1px solid ${isChecked ? '#10b981' : 'var(--border)'}`,
+                                      cursor: isStarted ? 'pointer' : 'not-allowed',
+                                      fontSize: 11,
+                                      fontWeight: 600,
+                                    }}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      disabled={!isStarted}
+                                      checked={isChecked}
+                                      onChange={e => {
+                                        if (!isStarted) return;
+                                        const checked = e.target.checked;
+                                        setCompletedDoses(prev => ({ ...prev, [boxKey]: checked }));
+                                        if (checked) {
+                                          toast.success(`✓ Marked ${box.label} as administered for "${m.medicineName}"`);
+                                        }
+                                      }}
+                                    />
+                                    <span>{box.label}</span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         );
       })()}
@@ -641,8 +805,8 @@ function RealtimeSubheadingRenderer({
             <textarea
               className="form-control"
               rows={3}
-              placeholder={`Enter real-time notes for Subheading #${subheadingId}...`}
-              value={getFieldValue(subheadingId, 'notes', `Real-time documentation entry for Subheading #${subheadingId}. Patient ${patient?.firstName || 'IP'} evaluated. Vitals: Temp ${latestVital.temperature || '98.6'}°F, BP ${latestVital.bloodPressure || '120/80'}.`)}
+              placeholder={`Enter notes for Subheading #${subheadingId}...`}
+              value={getFieldValue(subheadingId, 'notes', `Clinical documentation entry for Subheading #${subheadingId}. Patient ${patient?.firstName || 'IP'} evaluated. Vitals: Temp ${latestVital.temperature || '98.6'}°F, BP ${latestVital.bloodPressure || '120/80'}.`)}
               onChange={e => handleInputChange(subheadingId, 'notes', e.target.value)}
             />
           </div>
