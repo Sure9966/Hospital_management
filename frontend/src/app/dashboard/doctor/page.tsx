@@ -1125,9 +1125,42 @@ export default function DoctorDashboard() {
                           <td>
                             <div style={{ fontSize: 12 }}>
                               {p.medicines && p.medicines.length > 0 ? (
-                                p.medicines.map((m: any, mi: number) => (
-                                  <div key={mi}>• {m.name} ({m.dosage})</div>
-                                ))
+                                p.medicines.map((m: any, mi: number) => {
+                                  const medName = m.name || m.medicineName || '';
+                                  let marLogs: any[] = [];
+                                  if (typeof window !== 'undefined' && p.patientId) {
+                                    try {
+                                      const raw = localStorage.getItem(`hms_mar_logs_${p.patientId}`);
+                                      if (raw) {
+                                        const parsed = JSON.parse(raw);
+                                        const logs = parsed?.completedDosesLogs || {};
+                                        marLogs = Object.values(logs).filter((l: any) =>
+                                          (l.medName && medName && l.medName.toLowerCase().includes(medName.toLowerCase())) ||
+                                          (medName && l.medName && medName.toLowerCase().includes(l.medName.toLowerCase()))
+                                        );
+                                      }
+                                    } catch {}
+                                  }
+
+                                  return (
+                                    <div key={mi} style={{ marginBottom: 6 }}>
+                                      <strong>• {m.name || m.medicineName}</strong> ({m.dosage})
+                                      {marLogs.length > 0 ? (
+                                        <div style={{ marginTop: 2, paddingLeft: 10, fontSize: 10, color: '#10b981' }}>
+                                          {marLogs.map((log: any, li: number) => (
+                                            <div key={li} style={{ fontWeight: 600 }}>
+                                              ✓ Nurse MAR ({log.dayLabel}): Administered on <strong>{log.dateStr || log.timestamp} at {log.timeStr}</strong> by {log.nurseName}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <div style={{ fontSize: 10, color: 'var(--text-muted)', paddingLeft: 10 }}>
+                                          ⏳ Nurse MAR Stream: Awaiting administration
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })
                               ) : (
                                 <span className="text-muted">No medicines</span>
                               )}

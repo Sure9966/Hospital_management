@@ -5,6 +5,8 @@ import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import { useSearchParams } from 'next/navigation';
 
+import { getUser, setAuth, getToken } from '@/lib/auth';
+
 export default function ManagementDashboard() {
   const searchParams = useSearchParams();
   const [stats, setStats] = useState<any>({});
@@ -24,6 +26,10 @@ export default function ManagementDashboard() {
     try {
       await api.put(`/users/${userId}`, { dutyType });
       setStaff(prev => prev.map(u => u.id === userId ? { ...u, dutyType } : u));
+      const activeUser = getUser();
+      if (activeUser && activeUser.id === userId) {
+        setAuth(getToken() || '', { ...activeUser, dutyType });
+      }
       toast.success(`✅ Duty type updated to "${dutyType}"`);
     } catch {
       toast.error('Failed to update duty type');

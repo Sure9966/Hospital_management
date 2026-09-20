@@ -6,6 +6,8 @@ import toast from 'react-hot-toast';
 import { useSearchParams } from 'next/navigation';
 import { playNotificationSound } from '@/lib/sound';
 
+import { getUser } from '@/lib/auth';
+
 const emptyForm = {
   patientId: '', patientName: '', temperature: '', bloodPressure: '',
   heartRate: '', oxygenSaturation: '', respiratoryRate: '', weight: '',
@@ -18,6 +20,8 @@ export default function NurseDashboard() {
 
   useEffect(() => {
     setMounted(true);
+    const u = getUser();
+    const isIp = (u?.dutyType || '').toUpperCase() === 'IP';
     const tab = searchParams.get('tab');
 
     if (
@@ -26,11 +30,11 @@ export default function NurseDashboard() {
       tab === 'history' ||
       tab === 'reports' ||
       tab === 'discharges' ||
-      tab === 'inpatient'
+      (tab === 'inpatient' && isIp)
     ) {
       setActiveTab(tab as any);
     } else {
-      setActiveTab('inpatient');
+      setActiveTab(isIp ? 'inpatient' : 'vitals');
     }
   }, [searchParams]);
   const [vitals, setVitals] = useState<any[]>([]);
@@ -41,7 +45,7 @@ export default function NurseDashboard() {
   const [form, setForm] = useState({ ...emptyForm });
   const [loading, setLoading] = useState(false);
   const [stats, setStats] = useState<any>({});
-  const [activeTab, setActiveTab] = useState<'vitals' | 'triage' | 'history' | 'reports' | 'discharges' | 'inpatient'>('inpatient');
+  const [activeTab, setActiveTab] = useState<'vitals' | 'triage' | 'history' | 'reports' | 'discharges' | 'inpatient'>('vitals');
   const [searchQuery, setSearchQuery] = useState('');
   const [dischargeSummaries, setDischargeSummaries] = useState<any[]>([]);
   const [labTests, setLabTests] = useState<any[]>([]);
@@ -196,6 +200,9 @@ export default function NurseDashboard() {
     (d.diagnosis || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const currentUser = mounted ? getUser() : null;
+  const isIpDuty = (currentUser?.dutyType || '').toUpperCase() === 'IP';
+
   if (!mounted) {
     return null;
   }
@@ -203,17 +210,42 @@ export default function NurseDashboard() {
   return (
     <DashboardLayout role="nurse">
       <div className="topbar">
-        <div className="topbar-title">💗 Nurse Clinical Dashboard</div>
+        <div className="topbar-title" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span>💗 Nurse Clinical Dashboard</span>
+          <span className={`badge ${isIpDuty ? 'badge-success' : 'badge-warning'}`} style={{ fontSize: 12, padding: '4px 10px' }}>
+            {isIpDuty ? '🟢 Nurse IP Duty Active' : '🟡 Nurse OP Duty Active'}
+          </span>
+        </div>
         <button className="btn btn-primary" onClick={() => { setForm({ ...emptyForm }); setShowModal(true); }}>
           💗 Record Vitals & Triage Note
         </button>
       </div>
 
       <div className="page-content">
+        {/* OP Duty Info Banner */}
+        {!isIpDuty && (
+          <div style={{
+            background: 'rgba(245, 158, 11, 0.1)',
+            border: '1px solid rgba(245, 158, 11, 0.3)',
+            borderRadius: 10,
+            padding: '12px 16px',
+            marginBottom: 20,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            color: '#d97706'
+          }}>
+            <span style={{ fontSize: 20 }}>📢</span>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>
+              <strong>OP Duty Mode Active:</strong> You are currently assigned to Outpatient Duty. Outpatient vitals & triage controls are available. Inpatient Bed & Patient Monitoring is restricted to Nurses assigned to IP Duty.
+            </div>
+          </div>
+        )}
+
         {/* Navigation Phone/Tablet Responsive Tabs */}
         <div style={{ display: 'flex', gap: 8, overflowX: 'auto', marginBottom: 20, paddingBottom: 4 }}>
           {[
-            { id: 'inpatient', label: '🛏️ Inpatient Bed Monitoring', icon: '🛌' },
+            ...(isIpDuty ? [{ id: 'inpatient', label: '🛏️ Inpatient Bed Monitoring', icon: '🛌' }] : []),
             { id: 'vitals', label: '💗 Vitals Overview', icon: '🩺' },
             { id: 'triage', label: '📝 Triage & Priority Notes', icon: '🚨' },
             { id: 'history', label: '🏥 Patient Medical History', icon: '📂' },

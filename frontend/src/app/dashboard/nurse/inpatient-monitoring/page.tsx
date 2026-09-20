@@ -127,6 +127,7 @@ export default function InpatientMonitoringDashboard() {
   // Started medicines and completed doses states for MAR
   const [startedMedicines, setStartedMedicines] = useState<Record<string, boolean>>({});
   const [completedDoses, setCompletedDoses] = useState<Record<string, boolean>>({});
+  const [completedDosesLogs, setCompletedDosesLogs] = useState<Record<string, { timestamp: string; dateStr: string; timeStr: string; nurseName: string; dayLabel: string; medName?: string }>>({});
 
   // Form input state per patient and subheading
   const [formData, setFormData] = useState<Record<string, any>>({});
@@ -148,6 +149,43 @@ export default function InpatientMonitoringDashboard() {
       })
       .catch(() => toast.error('Failed to load inpatient records'));
   }, []);
+
+  // Sync saved MAR logs for selected patient
+  useEffect(() => {
+    if (selectedPatientId) {
+      try {
+        const raw = localStorage.getItem(`hms_mar_logs_${selectedPatientId}`);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed.startedMedicines) setStartedMedicines(parsed.startedMedicines);
+          if (parsed.completedDoses) setCompletedDoses(parsed.completedDoses);
+          if (parsed.completedDosesLogs) setCompletedDosesLogs(parsed.completedDosesLogs);
+        }
+      } catch {}
+    }
+  }, [selectedPatientId]);
+
+  const saveMarStorage = (
+    newStarted: Record<string, boolean>,
+    newCompleted: Record<string, boolean>,
+    newLogs: Record<string, any>
+  ) => {
+    if (!selectedPatientId) return;
+    try {
+      localStorage.setItem(
+        `hms_mar_logs_${selectedPatientId}`,
+        JSON.stringify({
+          startedMedicines: newStarted,
+          completedDoses: newCompleted,
+          completedDosesLogs: newLogs,
+          updatedAt: new Date().toISOString(),
+        })
+      );
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('hospital-data-refresh'));
+      }
+    } catch {}
+  };
 
   // Fetch real-time DB information whenever patient changes
   const fetchRealtimePatientDbData = useCallback(async (patientId: string) => {
@@ -189,12 +227,71 @@ export default function InpatientMonitoringDashboard() {
 
   // MAR Start Medicine Handler
   const handleStartMedicine = (medKey: string, medicineName: string) => {
-    setStartedMedicines(prev => ({
-      ...prev,
-      [medKey]: true,
-    }));
+    const nextStarted = { ...startedMedicines, [medKey]: true };
+    setStartedMedicines(nextStarted);
+    saveMarStorage(nextStarted, completedDoses, completedDosesLogs);
     playNotificationSound();
-    toast.success(`▶️ Medication started! Dose checkboxes are now enabled for "${medicineName}".`);
+    toast.success(`▶️ Medication started for "${medicineName}"! Day 1 checkbox is now enabled.`);
+  };
+
+  // MAR Dose Box Toggle Handler with Sequential Enablement & Date/Time Log Capture
+  const handleToggleDoseBox = (
+    medKey: string,
+    medicineName: string,
+    box: { id: string; label: string },
+    boxIdx: number,
+    boxes: { id: string; label: string }[],
+    isEnabled: boolean
+  ) => {
+    if (!isEnabled) {
+      if (!startedMedicines[medKey]) {
+        toast.error(`🔒 Click "▶️ Start Medicine" first to enable Day 1.`);
+      } else {
+        const prevBox = boxes[boxIdx - 1];
+        toast.error(`🔒 Complete "${prevBox?.label || 'previous day'}" first before enabling ${box.label}.`);
+      }
+      return;
+    }
+
+    const boxKey = `${medKey}-${box.id}`;
+    const currentlyChecked = !!completedDoses[boxKey];
+    const newChecked = !currentlyChecked;
+
+    const newCompletedDoses = { ...completedDoses, [boxKey]: newChecked };
+    const newLogs = { ...completedDosesLogs };
+
+    if (newChecked) {
+      const now = new Date();
+      const dateStr = now.toLocaleDateString();
+      const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const fullTimestamp = `${now.toISOString().slice(0, 10)} ${timeStr}`;
+      const nurseName = currentUser ? `${currentUser.firstName} ${currentUser.lastName}` : 'Staff Nurse';
+
+      newLogs[boxKey] = {
+        timestamp: fullTimestamp,
+        dateStr,
+        timeStr,
+        nurseName,
+        dayLabel: box.label,
+        medName: medicineName,
+      };
+
+      playNotificationSound();
+      toast.success(`✅ Administered ${box.label} for "${medicineName}" at ${timeStr} by ${nurseName}. Next day box is now enabled!`);
+    } else {
+      delete newLogs[boxKey];
+      // Uncheck subsequent boxes if previous day is unchecked
+      boxes.slice(boxIdx).forEach(b => {
+        const k = `${medKey}-${b.id}`;
+        delete newCompletedDoses[k];
+        delete newLogs[k];
+      });
+      toast.success(`↩️ Unmarked ${box.label} administration for "${medicineName}".`);
+    }
+
+    setCompletedDoses(newCompletedDoses);
+    setCompletedDosesLogs(newLogs);
+    saveMarStorage(startedMedicines, newCompletedDoses, newLogs);
   };
 
   // Safe field getter/setter
@@ -226,22 +323,26 @@ export default function InpatientMonitoringDashboard() {
   const activeCategory = CATEGORIES.find(c => c.key === activeCategoryKey) || CATEGORIES[0];
   const activeSubheadings = SUBHEADINGS.filter(s => s.categoryKey === activeCategoryKey);
 
-  // Access Guard: Strict Nurse role requirement
+  // Access Guard: Strict Nurse role requirement & IP Duty requirement
   const isNurseRole = currentUser?.role === 'nurse';
   const isIpDuty = (currentUser?.dutyType || '').toUpperCase() === 'IP';
 
-  if (currentUser && !isNurseRole) {
+  if (currentUser && (!isNurseRole || !isIpDuty)) {
     return (
       <DashboardLayout role="nurse" title="INPATIENT MONITORING DASHBOARD">
         <div className="card" style={{ maxWidth: 650, margin: '40px auto', padding: 30, textAlign: 'center' }}>
           <div style={{ fontSize: 48, marginBottom: 16 }}>🚫</div>
-          <h2 style={{ fontSize: 22, color: '#ef4444', marginBottom: 10 }}>Access Restricted — Nurse Role Required</h2>
+          <h2 style={{ fontSize: 22, color: '#ef4444', marginBottom: 10 }}>
+            {!isNurseRole ? 'Access Restricted — Nurse Role Required' : 'Access Restricted — Nurse IP Duty Required'}
+          </h2>
           <p style={{ color: 'var(--text-muted)', marginBottom: 20 }}>
-            This Inpatient Monitoring Dashboard can strictly be accessed only by logged-in Nurse staff.
-            Your current logged-in role is: <strong>{currentUser.role}</strong>.
+            {!isNurseRole
+              ? `This Inpatient Monitoring Dashboard can strictly be accessed only by logged-in Nurse staff. Your current logged-in role is: ${currentUser?.role || 'User'}.`
+              : `Inpatient Clinical Monitoring is strictly restricted to Nurses assigned to IP (Inpatient) Duty. Your current duty assignment is: ${(currentUser?.dutyType || 'OP').toUpperCase()} Duty.`
+            }
           </p>
-          <a href={`/dashboard/${currentUser.role}`} className="btn btn-primary" style={{ display: 'inline-block' }}>
-            ← Return to your {currentUser.role.toUpperCase()} Dashboard
+          <a href={`/dashboard/${currentUser?.role || 'nurse'}`} className="btn btn-primary" style={{ display: 'inline-block' }}>
+            ← Return to {currentUser?.role ? currentUser.role.toUpperCase() : 'Nurse'} Dashboard
           </a>
         </div>
       </DashboardLayout>
@@ -441,7 +542,9 @@ export default function InpatientMonitoringDashboard() {
                 setStartedMedicines={setStartedMedicines}
                 completedDoses={completedDoses}
                 setCompletedDoses={setCompletedDoses}
+                completedDosesLogs={completedDosesLogs}
                 handleStartMedicine={handleStartMedicine}
+                handleToggleDoseBox={handleToggleDoseBox}
                 getFieldValue={getFieldValue}
                 handleInputChange={handleInputChange}
               />
@@ -510,7 +613,9 @@ function RealtimeSubheadingRenderer({
   setStartedMedicines,
   completedDoses,
   setCompletedDoses,
+  completedDosesLogs,
   handleStartMedicine,
+  handleToggleDoseBox,
   getFieldValue,
   handleInputChange,
 }: {
@@ -524,7 +629,16 @@ function RealtimeSubheadingRenderer({
   setStartedMedicines: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
   completedDoses: Record<string, boolean>;
   setCompletedDoses: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  completedDosesLogs: Record<string, { timestamp: string; dateStr: string; timeStr: string; nurseName: string; dayLabel: string; medName?: string }>;
   handleStartMedicine: (medKey: string, medicineName: string) => void;
+  handleToggleDoseBox: (
+    medKey: string,
+    medicineName: string,
+    box: { id: string; label: string },
+    boxIdx: number,
+    boxes: { id: string; label: string }[],
+    isEnabled: boolean
+  ) => void;
   getFieldValue: (subId: number, field: string, defaultVal?: string) => string;
   handleInputChange: (subId: number, field: string, val: any) => void;
 }) {
@@ -703,48 +817,74 @@ function RealtimeSubheadingRenderer({
                           )}
                         </td>
                         <td>
-                          <div style={{ opacity: isStarted ? 1 : 0.45, transition: 'opacity 0.2s ease' }}>
+                          <div style={{ opacity: isStarted ? 1 : 0.6, transition: 'opacity 0.2s ease' }}>
                             {!isStarted && (
-                              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600 }}>
-                                🔒 Click "▶️ Start Medicine" to enable checkboxes
+                              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>
+                                🔒 Click "▶️ Start Medicine" to enable Day 1 box
                               </div>
                             )}
                             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                              {boxes.map(box => {
+                              {boxes.map((box, boxIdx) => {
                                 const boxKey = `${medKey}-${box.id}`;
                                 const isChecked = !!completedDoses[boxKey];
+                                const log = completedDosesLogs[boxKey];
+
+                                // Sequential enablement: Day 1 enabled when started. Day N enabled only if Day N-1 is checked!
+                                const isPrevChecked = boxIdx === 0 ? true : !!completedDoses[`${medKey}-${boxes[boxIdx - 1].id}`];
+                                const isEnabled = isStarted && isPrevChecked;
 
                                 return (
-                                  <label
+                                  <div
                                     key={box.id}
+                                    onClick={() => handleToggleDoseBox(medKey, m.medicineName, box, boxIdx, boxes, isEnabled)}
                                     style={{
                                       display: 'flex',
-                                      alignItems: 'center',
-                                      gap: 5,
-                                      padding: '4px 8px',
-                                      borderRadius: 6,
-                                      background: isChecked ? 'rgba(16,185,129,0.15)' : 'var(--bg-surface)',
-                                      border: `1px solid ${isChecked ? '#10b981' : 'var(--border)'}`,
-                                      cursor: isStarted ? 'pointer' : 'not-allowed',
+                                      flexDirection: 'column',
+                                      gap: 2,
+                                      padding: '6px 10px',
+                                      borderRadius: 8,
+                                      background: isChecked
+                                        ? 'rgba(16,185,129,0.18)'
+                                        : isEnabled
+                                        ? 'rgba(14,165,233,0.08)'
+                                        : 'var(--bg-surface)',
+                                      border: `1px solid ${
+                                        isChecked
+                                          ? '#10b981'
+                                          : isEnabled
+                                          ? 'rgba(14,165,233,0.4)'
+                                          : 'var(--border)'
+                                      }`,
+                                      cursor: isEnabled ? 'pointer' : 'not-allowed',
                                       fontSize: 11,
                                       fontWeight: 600,
+                                      opacity: isEnabled || isChecked ? 1 : 0.45,
+                                      userSelect: 'none',
+                                      transition: 'all 0.2s ease',
+                                      minWidth: 105,
                                     }}
                                   >
-                                    <input
-                                      type="checkbox"
-                                      disabled={!isStarted}
-                                      checked={isChecked}
-                                      onChange={e => {
-                                        if (!isStarted) return;
-                                        const checked = e.target.checked;
-                                        setCompletedDoses(prev => ({ ...prev, [boxKey]: checked }));
-                                        if (checked) {
-                                          toast.success(`✓ Marked ${box.label} as administered for "${m.medicineName}"`);
-                                        }
-                                      }}
-                                    />
-                                    <span>{box.label}</span>
-                                  </label>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                      <span>{isChecked ? '✅' : isEnabled ? '⬜' : '🔒'}</span>
+                                      <span style={{ color: isChecked ? '#10b981' : isEnabled ? 'var(--text-main)' : 'var(--text-muted)' }}>
+                                        {box.label}
+                                      </span>
+                                    </div>
+
+                                    {/* Real-time Timestamp & Nurse Name */}
+                                    {isChecked && log && (
+                                      <div style={{ fontSize: 9, color: '#059669', marginTop: 2, fontWeight: 700, lineHeight: 1.2 }}>
+                                        <div>🕒 {log.timeStr || log.timestamp}</div>
+                                        <div style={{ fontSize: 8, opacity: 0.85 }}>👤 {log.nurseName}</div>
+                                      </div>
+                                    )}
+
+                                    {!isChecked && !isEnabled && (
+                                      <div style={{ fontSize: 8, color: 'var(--text-muted)', marginTop: 2 }}>
+                                        {!isStarted ? '(Start med first)' : `(Complete Day ${boxIdx} first)`}
+                                      </div>
+                                    )}
+                                  </div>
                                 );
                               })}
                             </div>

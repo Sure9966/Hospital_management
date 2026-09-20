@@ -71,7 +71,14 @@ export default function Sidebar({ role }: { role: string }) {
   const router = useRouter();
   const { notifications, unreadCount, markRead, connectionStatus } = useSocket();
   const [notifOpen, setNotifOpen] = useState(false);
-  const menus = roleMenus[role] || [];
+  let menus = roleMenus[role] || [];
+  if (role === 'nurse') {
+    const isIpDuty = (user?.dutyType || '').toUpperCase() === 'IP';
+    if (!isIpDuty) {
+      // OP duty nurse: hide Inpatient Monitoring (IP) from sidebar navigation
+      menus = menus.filter(item => item.href !== '/dashboard/nurse/inpatient-monitoring');
+    }
+  }
 
   useEffect(() => {
     setMounted(true);
@@ -169,7 +176,22 @@ export default function Sidebar({ role }: { role: string }) {
             </div>
             <div className="user-info">
               <div className="user-name">{user?.firstName} {user?.lastName}</div>
-              <div className="user-role">{role}</div>
+              <div className="user-role" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <span>{role}</span>
+                {role === 'nurse' && (
+                  <span style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    padding: '1px 6px',
+                    borderRadius: 4,
+                    background: (user?.dutyType || '').toUpperCase() === 'IP' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)',
+                    color: (user?.dutyType || '').toUpperCase() === 'IP' ? '#34d399' : '#fbbf24',
+                    border: `1px solid ${(user?.dutyType || '').toUpperCase() === 'IP' ? 'rgba(16, 185, 129, 0.4)' : 'rgba(245, 158, 11, 0.4)'}`
+                  }}>
+                    {(user?.dutyType || 'OP').toUpperCase()} Duty
+                  </span>
+                )}
+              </div>
             </div>
           </div>
           <button
