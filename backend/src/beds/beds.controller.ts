@@ -61,6 +61,11 @@ export class BedsController {
     return this.bedsService.allocateBed(body.admissionId, body.bedId);
   }
 
+  @Post('transfer')
+  transferBed(@Body() body: { patientId?: string; fromBedId?: string; toBedId: string; reason?: string }) {
+    return this.bedsService.transferBed(body);
+  }
+
   @Post(':id/discharge')
   dischargePatient(@Param('id') bedId: string, @Body() body: { admissionId?: string }) {
     return this.bedsService.dischargePatient(bedId, body.admissionId);

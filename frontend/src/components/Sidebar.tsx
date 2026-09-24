@@ -44,11 +44,11 @@ const roleMenus: Record<string, { icon: string; label: string; href: string }[]>
   ],
   management: [
     { icon: '📊', label: 'Dashboard', href: '/dashboard/management' },
+    { icon: '🩺', label: 'Inpatient Monitoring', href: '/dashboard/management?tab=inpatient' },
     { icon: '👥', label: 'All Staff', href: '/dashboard/management?tab=staff' },
     { icon: '🏥', label: 'All Patients', href: '/dashboard/management?tab=patients' },
     { icon: '📋', label: 'Discharge Summaries', href: '/dashboard/management?tab=discharges' },
     { icon: '📢', label: 'Broadcast', href: '/dashboard/management?tab=broadcast' },
-    // { icon: '🛏️', label: 'Bed Management', href: '/dashboard/admin/beds' },
     { icon: '🛏️', label: 'Bed Management', href: '/dashboard/management/beds' },
   ],
   patient: [

@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleInit, BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Ward, Bed, BedStatus, Admission, AdmissionStatus } from './bed.entity';
@@ -61,7 +61,23 @@ export class BedsService implements OnModuleInit {
   }
 
   async createBed(data: Partial<Bed>) {
-    const bed = this.bedRepo.create(data);
+    if (!data.bedNumber || !data.bedNumber.trim()) {
+      throw new BadRequestException('Bed number is required');
+    }
+    const cleanBedNumber = data.bedNumber.trim();
+    const existing = await this.bedRepo
+      .createQueryBuilder('bed')
+      .where('LOWER(bed.bedNumber) = LOWER(:bedNumber)', { bedNumber: cleanBedNumber })
+      .getOne();
+
+    if (existing) {
+      throw new ConflictException(`Bed number "${cleanBedNumber}" already exists! Duplicate bed numbers are not allowed.`);
+    }
+
+    const bed = this.bedRepo.create({
+      ...data,
+      bedNumber: cleanBedNumber,
+    });
     return this.bedRepo.save(bed);
   }
 
@@ -190,5 +206,117 @@ export class BedsService implements OnModuleInit {
     }
 
     return bed;
+  }
+
+  async transferBed(data: { patientId?: string; fromBedId?: string; toBedId: string; reason?: string }) {
+    const { patientId, fromBedId, toBedId, reason } = data;
+
+    if (!toBedId) {
+      throw new BadRequestException('Destination bed ID is required');
+    }
+
+    const toBed = await this.bedRepo.findOne({ where: { id: toBedId }, relations: ['ward'] });
+    if (!toBed) {
+      throw new NotFoundException('Destination bed not found');
+    }
+
+    if (toBed.status !== BedStatus.VACANT) {
+      throw new BadRequestException(`Destination bed ${toBed.bedNumber} is not vacant (Current status: ${toBed.status})!`);
+    }
+
+    let fromBed: Bed | null = null;
+    if (fromBedId) {
+      fromBed = await this.bedRepo.findOne({ where: { id: fromBedId }, relations: ['ward'] });
+    } else if (patientId) {
+      fromBed = await this.bedRepo.findOne({ where: { currentPatientId: patientId }, relations: ['ward'] });
+    }
+
+    let patient: Patient | null = null;
+    if (patientId) {
+      patient = await this.patientRepo.findOne({ where: { id: patientId } });
+      if (!patient) {
+        patient = await this.patientRepo.findOne({ where: { patientId } });
+      }
+    }
+    if (!patient && fromBed && fromBed.currentPatientId) {
+      patient = await this.patientRepo.findOne({ where: { id: fromBed.currentPatientId } });
+      if (!patient) {
+        patient = await this.patientRepo.findOne({ where: { patientId: fromBed.currentPatientId } });
+      }
+    }
+
+    const patientName = patient ? `${patient.firstName} ${patient.lastName}` : (fromBed?.currentPatientName || 'Patient');
+    const pId = patient ? patient.patientId : (patientId || fromBed?.currentPatientId || '');
+    const admissionDate = fromBed?.admissionDate || new Date().toISOString();
+
+    // 1. Vacate origin bed if present
+    if (fromBed) {
+      fromBed.status = BedStatus.CLEANING;
+      fromBed.currentPatientId = null;
+      fromBed.currentPatientName = null;
+      fromBed.admissionDate = null;
+      await this.bedRepo.save(fromBed);
+    }
+
+    // 2. Occupy destination bed
+    toBed.status = BedStatus.OCCUPIED;
+    toBed.currentPatientId = patient?.id || pId;
+    toBed.currentPatientName = patientName;
+    toBed.admissionDate = admissionDate;
+    await this.bedRepo.save(toBed);
+
+    // 3. Update Patient record
+    if (patient) {
+      patient.status = PatientStatus.ADMITTED;
+      patient.bedNumber = toBed.bedNumber;
+      patient.ward = `${toBed.ward?.name || 'Ward'} (${toBed.roomNumber})`;
+      await this.patientRepo.save(patient);
+    }
+
+    // 4. Update Admission record if present
+    if (pId) {
+      const admission = await this.admissionRepo.findOne({
+        where: { patientId: pId, status: AdmissionStatus.ADMITTED },
+        order: { createdAt: 'DESC' },
+      });
+      if (admission) {
+        admission.allocatedBedId = toBed.id;
+        admission.allocatedBedNumber = toBed.bedNumber;
+        admission.allocatedRoomNumber = toBed.roomNumber;
+        admission.allocatedWardName = toBed.ward?.name || 'General';
+        admission.allocatedBedType = toBed.bedType || toBed.subType || 'Normal';
+        if (reason) {
+          admission.notes = admission.notes ? `${admission.notes} | Transfer: ${reason}` : `Transfer: ${reason}`;
+        }
+        await this.admissionRepo.save(admission);
+      }
+    }
+
+    // 5. Notify all portals
+    const fromLocation = fromBed ? `${fromBed.ward?.name || 'Ward'} (${fromBed.bedNumber})` : 'Previous Bed';
+    const toLocation = `${toBed.ward?.name || 'Ward'} (${toBed.bedNumber})`;
+    const notificationMsg = `Patient ${patientName} (${pId}) transferred from ${fromLocation} to ${toLocation}. ${reason ? `Reason: ${reason}` : ''}`;
+    
+    const rolesToNotify = ['receptionist', 'nurse', 'doctor', 'pharmacist', 'management'];
+    const idempotencyKey = `transfer-${pId}-${toBed.id}-${Date.now()}`;
+    for (const role of rolesToNotify) {
+      await this.notificationsService.sendToRole(
+        'Patient Bed Transfer',
+        notificationMsg,
+        role,
+        'bed_transfer',
+        pId,
+        undefined,
+        `${idempotencyKey}-${role}`,
+      );
+    }
+
+    return {
+      success: true,
+      message: `Patient ${patientName} transferred to bed ${toBed.bedNumber} successfully`,
+      patient,
+      fromBed,
+      toBed,
+    };
   }
 }

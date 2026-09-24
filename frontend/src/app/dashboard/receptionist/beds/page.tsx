@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import CenteredLoader from '@/components/CenteredLoader';
+import OpBillingCalculator from '@/components/OpBillingCalculator';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 
@@ -687,77 +688,30 @@ export default function ReceptionistBedManagement() {
 
       {/* ── MODAL: Billing / Payment Entry ───────── */}
       {showBillingModal && (
-        <div className="modal-overlay">
-          <div className="modal" style={{ maxWidth: 560 }}>
-            <div className="modal-header">
-              <h3>💳 Record Patient Payment</h3>
-              <button className="btn btn-secondary btn-sm btn-icon" onClick={() => setShowBillingModal(false)}>✕</button>
-            </div>
-            <form onSubmit={handleSaveBilling}>
-              <div className="modal-body">
-                <div className="form-grid form-grid-2" style={{ marginBottom: 14 }}>
-                  <div className="form-group">
-                    <label className="form-label">Patient Name *</label>
-                    <input className="form-control" placeholder="John Doe" value={billingForm.patientName} onChange={(e) => setBillingForm({ ...billingForm, patientName: e.target.value })} required />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Patient ID</label>
-                    <input className="form-control" placeholder="NMH26000000" value={billingForm.patientId} onChange={(e) => setBillingForm({ ...billingForm, patientId: e.target.value })} />
-                  </div>
-                </div>
-
-                <div style={{ background: 'var(--bg-surface)', borderRadius: 10, padding: 16, border: '1px solid var(--border)', marginBottom: 14 }}>
-                  <h4 style={{ fontSize: 13, fontWeight: 700, marginBottom: 12, color: 'var(--primary-light)' }}>💰 Bill Breakdown</h4>
-                  <div className="form-grid form-grid-2">
-                    <div className="form-group">
-                      <label className="form-label">Consultation Fee (₹)</label>
-                      <input type="number" className="form-control" value={billingForm.consultationFee} onChange={(e) => setBillingForm({ ...billingForm, consultationFee: Number(e.target.value) })} />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Medicine Charges (₹)</label>
-                      <input type="number" className="form-control" value={billingForm.medicineAmount} onChange={(e) => setBillingForm({ ...billingForm, medicineAmount: Number(e.target.value) })} />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Test / Lab Charges (₹)</label>
-                      <input type="number" className="form-control" value={billingForm.testAmount} onChange={(e) => setBillingForm({ ...billingForm, testAmount: Number(e.target.value) })} />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Bed / Room Charges (₹)</label>
-                      <input type="number" className="form-control" value={billingForm.bedCharges} onChange={(e) => setBillingForm({ ...billingForm, bedCharges: Number(e.target.value) })} />
-                    </div>
-                  </div>
-                  <div style={{ borderTop: '1px solid var(--border)', marginTop: 12, paddingTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontWeight: 700 }}>Total Amount:</span>
-                    <span style={{ fontSize: 22, fontWeight: 800, color: '#10b981' }}>
-                      ₹{(Number(billingForm.consultationFee) + Number(billingForm.medicineAmount) + Number(billingForm.testAmount) + Number(billingForm.bedCharges)).toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="form-grid form-grid-2">
-                  <div className="form-group">
-                    <label className="form-label">Payment Method</label>
-                    <select className="form-control" value={billingForm.paymentMethod} onChange={(e) => setBillingForm({ ...billingForm, paymentMethod: e.target.value })}>
-                      <option value="cash">Cash</option>
-                      <option value="card">Card</option>
-                      <option value="upi">UPI / QR</option>
-                      <option value="insurance">Insurance</option>
-                      <option value="netbanking">Net Banking</option>
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Notes</label>
-                    <input className="form-control" placeholder="Any remarks..." value={billingForm.notes} onChange={(e) => setBillingForm({ ...billingForm, notes: e.target.value })} />
-                  </div>
-                </div>
-              </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowBillingModal(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary">💳 Confirm & Record Payment</button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <OpBillingCalculator
+          isModal
+          onClose={() => setShowBillingModal(false)}
+          patientName={billingForm.patientName || 'Patient'}
+          patientId={billingForm.patientId}
+          onSavePayment={(billingData) => {
+            const newRecord = {
+              id: `INV-${Date.now().toString().slice(-6)}`,
+              patientName: billingForm.patientName || 'Patient',
+              patientId: billingForm.patientId || 'NMH260001',
+              consultationFee: billingData.opFee,
+              medicineAmount: billingData.medicinesFee,
+              testAmount: billingData.transferBedFee,
+              bedCharges: billingData.bedFee,
+              totalAmount: billingData.netPayableTotal,
+              paymentMethod: billingData.hasInsurance ? 'insurance' : billingForm.paymentMethod || 'cash',
+              createdAt: new Date().toISOString(),
+              status: 'paid',
+            };
+            setBillingRecords(prev => [newRecord, ...prev]);
+            toast.success(`💳 Payment of ₹${billingData.netPayableTotal.toLocaleString()} recorded successfully!`);
+            setShowBillingModal(false);
+          }}
+        />
       )}
 
       {/* ── MODAL: Discharge Confirmation ────────── */}

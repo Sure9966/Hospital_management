@@ -202,6 +202,17 @@ export default function BedManagementView({
       return;
     }
 
+    const trimmedBedNumber = bedForm.bedNumber.trim();
+
+    // Check for duplicate bed numbers on client side
+    const isDuplicate = beds.some(
+      b => b.bedNumber.trim().toLowerCase() === trimmedBedNumber.toLowerCase()
+    );
+    if (isDuplicate) {
+      toast.error(`❌ Duplicate bed number! Bed "${trimmedBedNumber}" already exists in system.`);
+      return;
+    }
+
     setActionLoading(true);
 
     // Resolve subType label
@@ -223,7 +234,7 @@ export default function BedManagementView({
 
     try {
       await api.post('/beds', {
-        bedNumber: bedForm.bedNumber,
+        bedNumber: trimmedBedNumber,
         roomNumber: bedForm.roomNumber,
         bedType: bedForm.bedType,
         subType: subType,
@@ -232,7 +243,7 @@ export default function BedManagementView({
         status: BedStatus.VACANT,
       });
 
-      toast.success(`✅ Bed ${bedForm.bedNumber} (${subType} - ${bedForm.roomNumber}) created successfully!`);
+      toast.success(`✅ Bed ${trimmedBedNumber} (${subType} - ${bedForm.roomNumber}) created successfully!`);
       setShowAddBedModal(false);
       
       // Reset form

@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
+import ManagementInpatientMonitoring from '@/components/ManagementInpatientMonitoring';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import { useSearchParams } from 'next/navigation';
@@ -17,7 +18,7 @@ export default function ManagementDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [broadcastForm, setBroadcastForm] = useState({ title: '', message: '', targetRole: '' });
   const [loading, setLoading] = useState(false);
-  const [tab, setTab] = useState<'overview' | 'staff' | 'patients' | 'discharges' | 'opd_records' | 'broadcast'>('overview');
+  const [tab, setTab] = useState<'overview' | 'inpatient' | 'staff' | 'patients' | 'discharges' | 'opd_records' | 'broadcast'>('overview');
   const [staffRoleFilter, setStaffRoleFilter] = useState<'all' | 'nurses_doctors' | 'nurse' | 'doctor'>('all');
   const [updatingDutyId, setUpdatingDutyId] = useState<string | null>(null);
 
@@ -52,7 +53,7 @@ export default function ManagementDashboard() {
 
   useEffect(() => {
     const tabParam = searchParams.get('tab');
-    if (tabParam === 'staff' || tabParam === 'patients' || tabParam === 'discharges' || tabParam === 'opd_records' || tabParam === 'broadcast') {
+    if (tabParam === 'inpatient' || tabParam === 'staff' || tabParam === 'patients' || tabParam === 'discharges' || tabParam === 'opd_records' || tabParam === 'broadcast') {
       setTab(tabParam as any);
     } else {
       setTab('overview');
@@ -144,9 +145,9 @@ export default function ManagementDashboard() {
           <button className="btn btn-secondary btn-sm" onClick={() => loadData()}>
             🔄 Refresh Records
           </button>
-          {(['overview', 'staff', 'patients', 'discharges', 'opd_records', 'broadcast'] as const).map(t => (
+          {(['overview', 'inpatient', 'staff', 'patients', 'discharges', 'opd_records', 'broadcast'] as const).map(t => (
             <button key={t} className={`btn btn-sm ${tab === t ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab(t)} style={{ textTransform: 'capitalize' }}>
-              {t === 'overview' ? '📊 Overview' : t === 'staff' ? '👥 Staff' : t === 'patients' ? '🏥 Patients' : t === 'discharges' ? '📋 Discharges' : t === 'opd_records' ? '📜 Previous OPD Records' : '📢 Broadcast'}
+              {t === 'overview' ? '📊 Overview' : t === 'inpatient' ? '🩺 Inpatient Monitoring' : t === 'staff' ? '👥 Staff' : t === 'patients' ? '🏥 Patients' : t === 'discharges' ? '📋 Discharges' : t === 'opd_records' ? '📜 Previous OPD Records' : '📢 Broadcast'}
             </button>
           ))}
         </div>
@@ -528,6 +529,8 @@ export default function ManagementDashboard() {
             </div>
           </div>
         )}
+
+        {tab === 'inpatient' && <ManagementInpatientMonitoring />}
 
         {tab === 'broadcast' && (
           <div className="card" style={{ maxWidth: 600 }}>
