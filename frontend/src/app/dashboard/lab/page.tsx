@@ -38,11 +38,44 @@ export default function LabDashboard() {
   // Result Recording Modal
   const [selectedTest, setSelectedTest] = useState<any>(null);
   const [showResultModal, setShowResultModal] = useState(false);
+  const [uploadingPdf, setUploadingPdf] = useState(false);
   const [resultForm, setResultForm] = useState({
     resultSummary: '',
     reportUrl: '',
     testValues: '',
   });
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingPdf(true);
+    toast.loading('Uploading report to Supabase...', { id: 'pdf-upload' });
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      let reportUrl = '';
+      if (selectedTest?.id) {
+        const res = await api.post(`/lab/${selectedTest.id}/upload-report`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        reportUrl = res.data.reportUrl;
+      } else {
+        const res = await api.post('/files/upload', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        reportUrl = res.data.url;
+      }
+
+      setResultForm((prev) => ({ ...prev, reportUrl }));
+      toast.success('📄 PDF Report uploaded to Supabase successfully!', { id: 'pdf-upload' });
+    } catch (err: any) {
+      toast.error('Failed to upload PDF report', { id: 'pdf-upload' });
+    } finally {
+      setUploadingPdf(false);
+    }
+  };
 
   const loadLabTests = async () => {
     try {
@@ -782,15 +815,53 @@ export default function LabDashboard() {
 
               <div style={{ marginBottom: '16px' }}>
                 <label style={{ fontSize: '12px', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '4px' }}>
-                  Report File / R2 Cloud Link URL (Optional)
+                  Supabase Cloud PDF Report (Upload or Link)
                 </label>
-                <input
-                  type="url"
-                  className="form-control"
-                  placeholder="https://r2.medicore-hms.com/reports/sample_report.pdf"
-                  value={resultForm.reportUrl}
-                  onChange={(e) => setResultForm({ ...resultForm, reportUrl: e.target.value })}
-                />
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <input
+                    type="url"
+                    className="form-control"
+                    placeholder="Supabase storage URL or paste link"
+                    value={resultForm.reportUrl}
+                    onChange={(e) => setResultForm({ ...resultForm, reportUrl: e.target.value })}
+                    style={{ flex: 1 }}
+                  />
+                  <label
+                    className="btn btn-secondary"
+                    style={{
+                      cursor: uploadingPdf ? 'not-allowed' : 'pointer',
+                      whiteSpace: 'nowrap',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '8px 12px',
+                      fontSize: '12px',
+                      backgroundColor: '#3b82f6',
+                      color: '#ffffff',
+                    }}
+                  >
+                    {uploadingPdf ? '⏳ Uploading...' : '📁 Upload PDF'}
+                    <input
+                      type="file"
+                      accept=".pdf,application/pdf"
+                      onChange={handleFileUpload}
+                      style={{ display: 'none' }}
+                      disabled={uploadingPdf}
+                    />
+                  </label>
+                </div>
+                {resultForm.reportUrl && (
+                  <div style={{ marginTop: '6px' }}>
+                    <a
+                      href={resultForm.reportUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ fontSize: '12px', color: '#0284c7', textDecoration: 'underline' }}
+                    >
+                      🔗 Preview Uploaded Supabase PDF
+                    </a>
+                  </div>
+                )}
               </div>
 
               <div style={{ marginBottom: '20px' }}>

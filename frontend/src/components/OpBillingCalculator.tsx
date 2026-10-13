@@ -376,7 +376,7 @@ export default function OpBillingCalculator({
           <div
             style={{
               display: 'flex',
-              justify: 'space-between',
+              justifyContent: 'space-between',
               alignItems: 'center',
               borderTop: '2px dashed #10b981',
               paddingTop: 8,

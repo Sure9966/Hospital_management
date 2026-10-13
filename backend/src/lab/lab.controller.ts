@@ -8,16 +8,25 @@ import {
   Body,
   Query,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { extname } from 'path';
 import { LabService } from './lab.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { LabTestPriority, LabTestStatus } from './lab-test.entity';
+import { SupabaseStorageService } from '../files/supabase-storage.service';
 
 @Controller('lab')
 @UseGuards(JwtAuthGuard)
 export class LabController {
-  constructor(private readonly labService: LabService) {}
+  constructor(
+    private readonly labService: LabService,
+    private readonly supabaseStorageService: SupabaseStorageService,
+  ) {}
 
   @Post()
   create(@Body() body: any, @CurrentUser() user: any) {
@@ -71,8 +80,37 @@ export class LabController {
     return this.labService.recordResults(id, resultSummary, reportUrl, testValues, userName);
   }
 
+  @Post(':id/upload-report')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 25 * 1024 * 1024 } }))
+  async uploadReport(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No report file provided');
+    }
+    const ext = extname(file.originalname || 'report.pdf') || '.pdf';
+    const storageKey = `lab-reports/lab_${id}_${Date.now()}${ext}`;
+    const uploadResult = await this.supabaseStorageService.uploadPdf(
+      storageKey,
+      file.buffer,
+      file.mimetype,
+    );
+    const reportUrl = uploadResult.publicUrl || `/uploads/${file.originalname}`;
+
+    await this.labService.update(id, { reportUrl });
+    return {
+      success: true,
+      reportUrl,
+      key: storageKey,
+      signedUrl: uploadResult.signedUrl,
+      source: uploadResult.source,
+    };
+  }
+
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.labService.remove(id);
   }
 }
+

@@ -13,6 +13,8 @@ import * as PDFDocument from 'pdfkit';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import { SupabaseStorageService } from '../files/supabase-storage.service';
+
 function isUuid(val?: string): boolean {
   if (!val) return false;
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
@@ -36,6 +38,7 @@ export class DoctorService {
     private notificationsService: NotificationsService,
     @InjectRepository(Appointment)
     private appointmentRepo: Repository<Appointment>,
+    private supabaseStorageService: SupabaseStorageService,
   ) {
     if (!fs.existsSync(this.storageDir)) {
       fs.mkdirSync(this.storageDir, { recursive: true });
@@ -331,7 +334,7 @@ export class DoctorService {
         .fillColor('#0f172a')
         .fontSize(16)
         .font('Helvetica-Bold')
-        .text('NEUROSTAR MULTISPECIALITY HOSPITAL', PAGE_LEFT, 30, {
+        .text('MEDICORE MULTISPECIALITY HOSPITAL', PAGE_LEFT, 30, {
           width: PAGE_WIDTH,
           align: 'center',
         });
@@ -532,8 +535,15 @@ export class DoctorService {
           const fileBuffer = fs.readFileSync(fullPath);
           const hashSum = crypto.createHash('sha256').update(fileBuffer).digest('hex');
 
+          // Upload to Supabase Storage with local backup
+          const uploadRes = await this.supabaseStorageService.uploadPdf(
+            pdfKey,
+            fileBuffer,
+            'application/pdf',
+          );
+
           await this.dischargeRepo.update(discharge.id, {
-            dischargePdfKey: pdfKey,
+            dischargePdfKey: uploadRes.key || pdfKey,
             dischargePdfName: `${discharge.patientId}_discharge.pdf`,
             dischargePdfMimeType: 'application/pdf',
             dischargePdfSize: stats.size,
@@ -746,22 +756,43 @@ export class DoctorService {
       throw new NotFoundException('Discharge summary not found');
     }
 
-    const fullPath = path.join(this.storageDir, `${discharge.patientId}_discharge.pdf`);
+    const pdfKey = discharge.dischargePdfKey || `discharges/${discharge.patientId}_${Date.now()}.pdf`;
+    const localFilename = `${discharge.patientId}_discharge.pdf`;
 
-    if (!fs.existsSync(fullPath)) {
+    // Try Supabase Storage first
+    let storageResult = await this.supabaseStorageService.downloadPdf(pdfKey, localFilename);
+
+    if (!storageResult) {
       // Regenerate if missing
       const patient = await this.findPatientSafely(discharge.patientId);
       if (patient) {
         await this.generateDischargePdf(discharge, patient);
+        storageResult = await this.supabaseStorageService.downloadPdf(pdfKey, localFilename);
       }
     }
 
-    return {
-      stream: fs.createReadStream(fullPath),
-      filename: `${discharge.patientId}_discharge.pdf`,
-      mimeType: 'application/pdf',
-      size: fs.statSync(fullPath).size,
-    };
+    if (storageResult) {
+      const { Readable } = await import('stream');
+      return {
+        stream: Readable.from(storageResult.buffer),
+        filename: `${discharge.patientId}_discharge.pdf`,
+        mimeType: 'application/pdf',
+        size: storageResult.size,
+        publicUrl: this.supabaseStorageService.getPublicUrl(pdfKey),
+      };
+    }
+
+    const fullPath = path.join(this.storageDir, localFilename);
+    if (fs.existsSync(fullPath)) {
+      return {
+        stream: fs.createReadStream(fullPath),
+        filename: `${discharge.patientId}_discharge.pdf`,
+        mimeType: 'application/pdf',
+        size: fs.statSync(fullPath).size,
+      };
+    }
+
+    throw new NotFoundException('Discharge PDF not found');
   }
 
   async getOpdSlipPdfStream(patientId: string, consultationId?: string) {
@@ -806,7 +837,7 @@ export class DoctorService {
         .fillColor('#0f172a')
         .fontSize(16)
         .font('Helvetica-Bold')
-        .text('NEUROSTAR MULTISPECIALITY HOSPITAL', PAGE_LEFT, 30, { width: PAGE_WIDTH, align: 'center' });
+        .text('MEDICORE MULTISPECIALITY HOSPITAL', PAGE_LEFT, 30, { width: PAGE_WIDTH, align: 'center' });
 
       doc
         .fontSize(8)
@@ -896,9 +927,15 @@ export class DoctorService {
     });
 
     const stats = fs.statSync(tempPdfPath);
-    const readStream = fs.createReadStream(tempPdfPath);
+    const fileBuffer = fs.readFileSync(tempPdfPath);
+
+    // Archive OPD slip to Supabase Storage asynchronously in background
+    const opdKey = `opd-slips/opd_${patient.patientId}_${Date.now()}.pdf`;
+    this.supabaseStorageService.uploadPdf(opdKey, fileBuffer, 'application/pdf').catch(() => {});
+
+    const { Readable } = await import('stream');
     return {
-      stream: readStream,
+      stream: Readable.from(fileBuffer),
       filename: `${patient.patientId}_opd_slip.pdf`,
       mimeType: 'application/pdf',
       size: stats.size,

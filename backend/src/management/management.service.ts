@@ -10,6 +10,7 @@ import { DischargeSummary } from '../doctor/discharge-summary.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import * as fs from 'fs';
 import * as path from 'path';
+import { SupabaseStorageService } from '../files/supabase-storage.service';
 
 @Injectable()
 export class ManagementService {
@@ -23,6 +24,7 @@ export class ManagementService {
     @InjectRepository(Vital) private vitalRepo: Repository<Vital>,
     @InjectRepository(DischargeSummary) private dischargeRepo: Repository<DischargeSummary>,
     private notificationsService: NotificationsService,
+    private supabaseStorageService: SupabaseStorageService,
   ) {
     if (!fs.existsSync(this.storageDir)) {
       fs.mkdirSync(this.storageDir, { recursive: true });
@@ -79,8 +81,22 @@ export class ManagementService {
       throw new NotFoundException('Discharge summary not found');
     }
 
-    let fullPath = path.join(this.storageDir, `${discharge.patientId}_discharge.pdf`);
+    const pdfKey = discharge.dischargePdfKey || `discharges/${discharge.patientId}_discharge.pdf`;
+    const localFilename = `${discharge.patientId}_discharge.pdf`;
 
+    const storageResult = await this.supabaseStorageService.downloadPdf(pdfKey, localFilename);
+    if (storageResult) {
+      const { Readable } = await import('stream');
+      return {
+        stream: Readable.from(storageResult.buffer),
+        filename: localFilename,
+        mimeType: 'application/pdf',
+        size: storageResult.size,
+        publicUrl: this.supabaseStorageService.getPublicUrl(pdfKey),
+      };
+    }
+
+    let fullPath = path.join(this.storageDir, localFilename);
     if (!fs.existsSync(fullPath)) {
       if (discharge.dischargePdfKey && fs.existsSync(path.join(this.storageDir, discharge.dischargePdfKey))) {
         fullPath = path.join(this.storageDir, discharge.dischargePdfKey);
@@ -91,7 +107,7 @@ export class ManagementService {
 
     return {
       stream: fs.createReadStream(fullPath),
-      filename: `${discharge.patientId}_discharge.pdf`,
+      filename: localFilename,
       mimeType: 'application/pdf',
       size: fs.statSync(fullPath).size,
     };

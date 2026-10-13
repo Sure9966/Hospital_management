@@ -11,6 +11,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { Patient } from '../patients/patient.entity';
+import { SupabaseStorageService } from '../files/supabase-storage.service';
 
 @Injectable()
 export class PharmacyService implements OnModuleInit {
@@ -24,6 +25,7 @@ export class PharmacyService implements OnModuleInit {
     @InjectRepository(Tablet)
     private tabletRepo: Repository<Tablet>,
     private notificationsService: NotificationsService,
+    private supabaseStorageService: SupabaseStorageService,
   ) {
     if (!fs.existsSync(this.storageDir)) {
       fs.mkdirSync(this.storageDir, { recursive: true });
@@ -295,7 +297,7 @@ export class PharmacyService implements OnModuleInit {
         .fillColor('#0f172a')
         .fontSize(16)
         .font('Helvetica-Bold')
-        .text('NEUROSTAR MULTISPECIALITY HOSPITAL', PAGE_LEFT, 30, {
+        .text('MEDICORE MULTISPECIALITY HOSPITAL', PAGE_LEFT, 30, {
           width: PAGE_WIDTH,
           align: 'center',
         });
@@ -310,14 +312,14 @@ export class PharmacyService implements OnModuleInit {
           50,
           { width: PAGE_WIDTH, align: 'center' },
         )
-        .text('Phone: 7396333335 | Email: neurostarhospital@gmail.com', {
+        .text('Phone: 7396333335 | Email: medicorehospital@gmail.com', {
           width: PAGE_WIDTH,
           align: 'center',
         });
 
       // Logo (top-right) — replace with real file if you have it
-      doc.image('assets/logo.png', PAGE_RIGHT - 55, 25, { width: 50 });
-      doc.image('assets/logo1.png', PAGE_LEFT - 55, 25, { width: 50 });
+      // doc.image('assets/logo.png', PAGE_RIGHT - 55, 25, { width: 50 });
+      // doc.image('assets/logo1.png', PAGE_LEFT - 55, 25, { width: 50 });
       // ─── Title bar ──────────────────────────────────────────────────
       const titleY = 80;
       doc.rect(PAGE_LEFT, titleY, PAGE_WIDTH, 20).fill('#1e3a8a');
@@ -358,7 +360,7 @@ export class PharmacyService implements OnModuleInit {
 
       drawRow('Invoice No', rx.invoiceNumber || 'INV-PENDING', 'Prescription No', rx.prescriptionId);
       drawRow('Patient Name', rx.patientName, 'Patient ID', rx.patientId);
-      drawRow('Prescribing Doctor', `Dr. ${rx.doctorName || '—'}`, 'Date', new Date(rx.createdAt).toLocaleDateString());
+      drawRow('Prescribing Doctor', ` ${rx.doctorName || '—'}`, 'Date', new Date(rx.createdAt).toLocaleDateString());
       drawRow('Diagnosis', rx.diagnosis || 'N/A', 'Billing Status', (rx.billingStatus || 'unbilled').toUpperCase());
 
       // ─── Medicines table ────────────────────────────────────────────
@@ -368,7 +370,7 @@ export class PharmacyService implements OnModuleInit {
       y += 14;
 
       const COL_NUM = PAGE_LEFT;
-      const COL_NAME = PAGE_LEFT + 24;
+      const COL_NAME = PAGE_LEFT + 34;   // wider S.NO column (34 instead of 24)
       const COL_QTY = PAGE_LEFT + 300;
       const COL_UNIT = PAGE_LEFT + 350;
       const COL_TOTAL = PAGE_LEFT + 445;
@@ -377,11 +379,11 @@ export class PharmacyService implements OnModuleInit {
       // header row
       doc.rect(PAGE_LEFT, y, PAGE_WIDTH, ROW_H).fill('#e2e8f0').stroke('#94a3b8');
       doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(9);
-      doc.text('#', COL_NUM + 4, y + 6, { width: 20 });
-      doc.text('Medicine & Schedule', COL_NAME, y + 6, { width: 270 });
+      doc.text('S.NO', COL_NUM + 4, y + 6, { width: 30 });  // wider width so text fits
+      doc.text('Medicine & Schedule', COL_NAME, y + 6, { width: 260 });
       doc.text('Qty', COL_QTY, y + 6, { width: 40, align: 'center' });
       doc.text('Unit Cost', COL_UNIT, y + 6, { width: 80, align: 'right' });
-      doc.text('Line Total', COL_TOTAL, y + 6, { width: 90, align: 'right' });
+      doc.text('Total Cost', COL_TOTAL, y + 6, { width: 90, align: 'right' });
 
       // vertical column dividers
       const drawColumnLines = (rowY: number, h: number) => {
@@ -410,20 +412,20 @@ export class PharmacyService implements OnModuleInit {
         drawColumnLines(y, h);
 
         doc.font('Helvetica').fillColor('#334155').fontSize(9);
-        doc.text(`${idx + 1}`, COL_NUM + 4, y + 6, { width: 20 });
+        doc.text(`${idx + 1}`, COL_NUM + 4, y + 6, { width: 30 });
 
         doc.font('Helvetica-Bold').fillColor('#0f172a');
-        doc.text(nameText, COL_NAME, y + 5, { width: 270 });
+        doc.text(nameText, COL_NAME, y + 5, { width: 260 });
 
         if (subText) {
           doc.font('Helvetica').fontSize(8).fillColor('#64748b');
-          doc.text(subText, COL_NAME, y + 5 + nameHeight + 1, { width: 270 });
+          doc.text(subText, COL_NAME, y + 5 + nameHeight + 1, { width: 260 });
         }
 
         doc.font('Helvetica').fillColor('#334155').fontSize(9);
         doc.text(`${m.quantity}`, COL_QTY, y + 6, { width: 40, align: 'center' });
-        doc.text(`$${Number(m.unitCost || 0).toFixed(2)}`, COL_UNIT, y + 6, { width: 80, align: 'right' });
-        doc.text(`$${Number(m.lineTotal || 0).toFixed(2)}`, COL_TOTAL, y + 6, { width: 90, align: 'right' });
+        doc.text(`Rs. ${Number(m.unitCost || 0).toFixed(2)}`, COL_UNIT, y + 6, { width: 80, align: 'right' });
+        doc.text(`Rs. ${Number(m.lineTotal || 0).toFixed(2)}`, COL_TOTAL, y + 6, { width: 90, align: 'right' });
 
         y += h;
       });
@@ -437,19 +439,19 @@ export class PharmacyService implements OnModuleInit {
 
       doc.fillColor('#334155').font('Helvetica').fontSize(9);
       doc.text('Subtotal:', boxX + 12, y + 12);
-      doc.text(`$${Number(rx.subtotal || 0).toFixed(2)}`, boxX + boxW - 90, y + 12, { width: 78, align: 'right' });
+      doc.text(`Rs. ${Number(rx.subtotal || 0).toFixed(2)}`, boxX + boxW - 90, y + 12, { width: 78, align: 'right' });
 
       doc.text('Discount:', boxX + 12, y + 30);
-      doc.text(`-$${Number(rx.discountAmount || 0).toFixed(2)}`, boxX + boxW - 90, y + 30, { width: 78, align: 'right' });
+      doc.text(`-Rs. ${Number(rx.discountAmount || 0).toFixed(2)}`, boxX + boxW - 90, y + 30, { width: 78, align: 'right' });
 
       doc.text('Tax / Service Charge:', boxX + 12, y + 48);
-      doc.text(`+$${Number(rx.taxAmount || 0).toFixed(2)}`, boxX + boxW - 90, y + 48, { width: 78, align: 'right' });
+      doc.text(`+Rs. ${Number(rx.taxAmount || 0).toFixed(2)}`, boxX + boxW - 90, y + 48, { width: 78, align: 'right' });
 
       doc.moveTo(boxX + 10, y + 68).lineTo(boxX + boxW - 10, y + 68).stroke('#cbd5e1');
 
       doc.fontSize(11).font('Helvetica-Bold').fillColor('#0f172a');
       doc.text('Total Payable:', boxX + 12, y + 76);
-      doc.text(`$${Number(rx.totalCost || 0).toFixed(2)}`, boxX + boxW - 90, y + 76, { width: 78, align: 'right' });
+      doc.text(`Rs. ${Number(rx.totalCost || 0).toFixed(2)}`, boxX + boxW - 90, y + 76, { width: 78, align: 'right' });
 
       // ─── Status panel (left of billing box) ─────────────────────────
       const statusX = PAGE_LEFT;
@@ -473,7 +475,7 @@ export class PharmacyService implements OnModuleInit {
       if (rx.dispensedAt) {
         doc.text(`Dispensed At: ${new Date(rx.dispensedAt).toLocaleString()}`, statusX + 10, y + 60);
       }
-      doc.text('🔒 Secure & Encrypted Record — SHA-256 Validated', statusX + 10, y + 80, { width: statusW - 20 });
+      // doc.text('🔒 Secure & Encrypted Record — SHA-256 Validated', statusX + 10, y + 80, { width: statusW - 20 });
 
       y += boxH + 16;
 
@@ -507,7 +509,7 @@ export class PharmacyService implements OnModuleInit {
         .fontSize(7)
         .fillColor('#94a3b8')
         .text(
-          'This document is electronically generated by NERUO MULTI SPECIALITY Health System. Valid without physical signature.',
+          'This document is electronically generated by MEDICORE MULTI SPECIALITY Health System. Valid without physical signature.',
           PAGE_LEFT,
           800,
           { width: PAGE_WIDTH, align: 'center' },
@@ -521,8 +523,15 @@ export class PharmacyService implements OnModuleInit {
           const fileBuffer = fs.readFileSync(fullPath);
           const hashSum = crypto.createHash('sha256').update(fileBuffer).digest('hex');
 
+          // Store in Supabase Storage with local fallback
+          const uploadRes = await this.supabaseStorageService.uploadPdf(
+            pdfKey,
+            fileBuffer,
+            'application/pdf',
+          );
+
           await this.prescriptionRepo.update(rx.id, {
-            invoicePdfKey: pdfKey,
+            invoicePdfKey: uploadRes.key || pdfKey,
             invoicePdfName: `${rx.prescriptionId}.pdf`,
             invoicePdfMimeType: 'application/pdf',
             invoicePdfSize: stats.size,
@@ -542,19 +551,40 @@ export class PharmacyService implements OnModuleInit {
 
   async getInvoiceFileStream(id: string) {
     const rx = await this.findOne(id);
-    const fullPath = path.join(this.storageDir, `${rx.prescriptionId}.pdf`);
+    const pdfKey = rx.invoicePdfKey || `invoices/${rx.prescriptionId}_${Date.now()}.pdf`;
+    const localFilename = `${rx.prescriptionId}.pdf`;
 
-    if (!fs.existsSync(fullPath)) {
+    // Try downloading from Supabase Storage or local cache
+    let storageResult = await this.supabaseStorageService.downloadPdf(pdfKey, localFilename);
+
+    if (!storageResult) {
       // Regenerate if missing
       await this.generateAndStorePdf(rx);
+      storageResult = await this.supabaseStorageService.downloadPdf(pdfKey, localFilename);
     }
 
-    return {
-      stream: fs.createReadStream(fullPath),
-      filename: `${rx.prescriptionId}_Invoice.pdf`,
-      mimeType: 'application/pdf',
-      size: fs.statSync(fullPath).size,
-    };
+    if (storageResult) {
+      const { Readable } = await import('stream');
+      return {
+        stream: Readable.from(storageResult.buffer),
+        filename: `${rx.prescriptionId}_Invoice.pdf`,
+        mimeType: 'application/pdf',
+        size: storageResult.size,
+        publicUrl: this.supabaseStorageService.getPublicUrl(pdfKey),
+      };
+    }
+
+    const fullPath = path.join(this.storageDir, localFilename);
+    if (fs.existsSync(fullPath)) {
+      return {
+        stream: fs.createReadStream(fullPath),
+        filename: `${rx.prescriptionId}_Invoice.pdf`,
+        mimeType: 'application/pdf',
+        size: fs.statSync(fullPath).size,
+      };
+    }
+
+    throw new NotFoundException('Prescription invoice PDF not found');
   }
 
   // --- STORE TABLET INVENTORY MANAGEMENT ---

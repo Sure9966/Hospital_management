@@ -24,6 +24,7 @@ export default function PrescriptionsPage() {
   const [dispenseBillingStatus, setDispenseBillingStatus] = useState<string>('billed');
 
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -226,8 +227,44 @@ export default function PrescriptionsPage() {
 
         {/* Prescription Table */}
         <div className="card">
-          <div className="card-header">
+          <div className="card-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span className="card-title">📜 Prescriptions List ({filteredPrescriptions.length})</span>
+            <button
+              onClick={async () => {
+                setRefreshing(true);
+                try { await loadPrescriptions(); toast.success('Prescriptions refreshed!'); }
+                catch { toast.error('Failed to refresh'); }
+                finally { setRefreshing(false); }
+              }}
+              disabled={refreshing}
+              title="Refresh prescriptions"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 14px',
+                borderRadius: '8px',
+                border: '1px solid #e2e8f0',
+                backgroundColor: refreshing ? '#f1f5f9' : '#ffffff',
+                color: '#475569',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: refreshing ? 'not-allowed' : 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <span
+                style={{
+                  display: 'inline-block',
+                  fontSize: '15px',
+                  animation: refreshing ? 'spin 0.8s linear infinite' : 'none',
+                }}
+              >
+                🔄
+              </span>
+              {refreshing ? 'Refreshing...' : 'Refresh'}
+            </button>
+            <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
           </div>
 
           <div className="table-container">
